@@ -24,9 +24,9 @@ import { appVersionLabel } from "@/lib/deployed-version";
 import { agentActivity, agentEarnings } from "@/lib/points/agent-earnings";
 import { earnBalanceFor, showEarnWelcome } from "@/lib/earn/state";
 import { EarnWelcomeToast } from "@/components/earn-welcome-toast";
-import { isEarnConnectPath, isEarnLandingPath, isEarnPath } from "@/lib/earn/paths";
+import { isEarnPath } from "@/lib/earn/paths";
 import { withdrawInfo } from "@/lib/earn/draft";
-import { earnAgentWhere, earnWorkspace } from "@/lib/earn/earner";
+import { earnWorkspace } from "@/lib/earn/earner";
 
 export default async function AppLayout({
   children,
@@ -76,25 +76,10 @@ export default async function AppLayout({
   }
 
   const user = await requireUser();
-  // Earn (#earn-landing): "Put your agent to work" is a page of its own, for someone who has just
-  // arrived to earn: no header, agents bar or footer around it. It stops being one once an agent is connected.
+  // Earn (#earn-landing): connecting an agent (/earn/agent) is a page of its own: no header, agents bar or footer around it.
   const requestPath = (await headers()).get("x-ziki-path") ?? "";
   // The first time someone opens an earn page in a browser, new account or old: a note that the $5 is in.
   const welcomeNotice = isEarnPath(requestPath) ? await showEarnWelcome(user.id).catch(() => false) : false;
-  if (isEarnLandingPath(requestPath) || isEarnConnectPath(requestPath)) {
-    const connected = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), select: { id: true } }).catch(() => null);
-    if (!connected || isEarnConnectPath(requestPath)) {
-      return (
-        <div data-app-shell="" className="min-h-dvh bg-zk-bg">
-          <SkipLink />
-          <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-h-dvh outline-none">
-            {children}
-          </main>
-          {welcomeNotice ? <EarnWelcomeToast /> : null}
-        </div>
-      );
-    }
-  }
   // The header lists this person's workspaces. Pages still resolve the active
   // project inside the current workspace, so a foreign project id is ignored.
   let workspaces: WorkspaceChoice[] = [];

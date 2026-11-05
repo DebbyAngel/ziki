@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { EARN_TASKS, WITHDRAW_THRESHOLD, stageTasks } from "@/lib/earn/draft";
 import { earnState } from "@/lib/earn/state";
-import { EarnLanding } from "@/components/earn-landing";
 import { formatZ } from "@/lib/points/rules";
 import { agentsLink, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
 import { earnAgentWhere } from "@/lib/earn/earner";
@@ -20,17 +19,12 @@ const RING = 2 * Math.PI * 24;
  * next: Ziki's own projects. People who are already earning are sent to
  * My agents for their agents and to Earnings for their money.
  */
-export default async function EarnPage({ searchParams }: { searchParams: Promise<{ connected?: string }> }) {
+export default async function EarnHomePage() {
   const user = await requireUser();
-  // Just connected an agent: always land here, on choosing what it works on, whatever else the person has done.
-  const justConnected = (await searchParams).connected === "1";
   const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true } }).catch(() => null);
-  const { stage, started } = await earnState(user.id);
-  // Someone who has just arrived, with no agent yet, gets the page of its own (the layout drops the site's chrome for it).
-  if (!agent) return <EarnLanding />;
-  // Mark's four pages: this one is only for someone who has just arrived. Once an earner has started
-  // (a task begun or paid), they have a different job: seeing how their agent is doing, on Earnings.
-  if (!justConnected && (stage !== "new" || started !== null)) redirect("/earn/earnings");
+  const { stage } = await earnState(user.id);
+  // No agent yet: connecting it comes first.
+  if (!agent) redirect("/earn/agent");
 
   const paidTasks = stageTasks(stage).filter((task) => task.done).length;
   const maxPay = Math.max(...EARN_TASKS.map((task) => task.pay));
@@ -139,9 +133,6 @@ export default async function EarnPage({ searchParams }: { searchParams: Promise
                 </li>
               ))}
             </ul>
-            <p className="border-t border-zk-divider pt-3 text-xs leading-relaxed text-zk-muted">
-              Marketing alone won’t reach $30. Finish its tasks and Open source pays the rest.
-            </p>
           </aside>
         </div>
 

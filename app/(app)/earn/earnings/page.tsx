@@ -90,7 +90,7 @@ export default async function EarningsPage() {
             <EarnWithdraw info={info} className={ready ? agentsPrimaryBtn : agentsSecondaryBtn}>
               {ready ? `Withdraw $${balance.withdrawable.toFixed(2)}` : "Withdraw"}
             </EarnWithdraw>
-            <span className="text-xs text-zk-muted">{ready ? "Paid to the wallet in Settings." : `Opens at ${formatZ(WITHDRAW_THRESHOLD)}.`}</span>
+            {ready ? <span className="text-xs text-zk-muted">Paid to the wallet in Settings.</span> : null}
           </div>
         </section>
 

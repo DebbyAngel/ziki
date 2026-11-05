@@ -7,7 +7,7 @@ import { isEarnPath } from "@/lib/earn/paths";
  */
 describe("isEarnPath", () => {
   it("is true on the earn pages", () => {
-    for (const path of ["/earn", "/earn/", "/earn/connect", "/earn/marketing", "/earn/marketing/2", "/earn/withdraw", "/ziki-earn/tasks/1"]) {
+    for (const path of ["/earn", "/earn/", "/earn/agent", "/earn/marketing", "/earn/marketing/2", "/earn/withdraw", "/ziki-earn/tasks/1"]) {
       expect(isEarnPath(path), path).toBe(true);
     }
   });

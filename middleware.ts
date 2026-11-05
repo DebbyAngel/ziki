@@ -38,6 +38,7 @@ export function isPublicPath(
     pathWithoutBase === "/how-it-works" ||
     pathWithoutBase === "/for-agents" ||
     pathWithoutBase === "/developers" ||
+    pathWithoutBase === "/earn" ||
     isAuthPage ||
     isPasswordResetPage ||
     isPublicAgentPath(pathWithoutBase) ||

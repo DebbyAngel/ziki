@@ -80,7 +80,7 @@ export async function startedTask(userId: string): Promise<number | null> {
 export async function requireEarnAgent(userId: string): Promise<void> {
   if (await previewStage()) return;
   const agent = await prisma.agent.findFirst({ where: earnAgentWhere(userId), select: { id: true } });
-  if (!agent) redirect("/earn");
+  if (!agent) redirect("/earn/agent");
 }
 
 export async function startIfAgentConnected(userId: string): Promise<void> {
