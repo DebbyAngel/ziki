@@ -86,6 +86,15 @@ export const EARN_LINK = "ziki.dev/r/chloe";
  */
 export const SIGNUP_BONUS = 5;
 
+/**
+ * An account made on or after this moment signed up after Earn went live: it is shown the "$5 awarded" pop-up
+ * when it first opens Earn. An older account still gets the $5 in its balance, quietly. A placeholder for Mark.
+ */
+export const EARN_WELCOME_FROM = new Date("2026-11-05T00:00:00.000Z");
+
+/** Set once the person has dismissed the "$5 awarded" pop-up, so it shows once per browser. */
+export const EARN_WELCOME_SEEN_COOKIE = "earn-welcome-seen";
+
 /** The earner's project in that workspace: its main list holds the Ziki tasks step. */
 export const EARN_PROJECT_SLUG = "ziki-earn";
 

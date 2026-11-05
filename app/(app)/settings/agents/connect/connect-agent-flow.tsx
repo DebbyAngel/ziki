@@ -232,7 +232,7 @@ export function ConnectAgentFlow({ projectId, next }: { projectId: string | null
 }
 
 /** A little robot dancing on the success screen. The moves live in globals.css (zk-dance-*). */
-function DancingAgent() {
+export function DancingAgent() {
   return (
     <svg viewBox="0 0 120 140" width="150" height="175" className="mx-auto overflow-visible" aria-hidden="true">
       <g className="fill-zk-accent text-[15px] font-bold">

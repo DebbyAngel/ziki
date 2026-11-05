@@ -6,6 +6,7 @@ import { CONVERSION_BONUS, WITHDRAW_THRESHOLD, earnPreviewEnabled, stagePeople, 
 import { earnBalanceFor } from "@/lib/earn/state";
 import { EarnBar, LockIcon } from "@/components/earn-money";
 import { agentsLink, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
+import { earnAgentWhere } from "@/lib/earn/earner";
 
 export const metadata = { title: "Withdraw" };
 
@@ -20,7 +21,7 @@ export default async function EarnWithdrawPage() {
   const ready = balance.withdrawable > 0;
   const left = Math.max(0, WITHDRAW_THRESHOLD - balance.earned);
   const [agent] = await Promise.all([
-    prisma.agent.findFirst({ where: { ownerUserId: user.id, revokedAt: null }, orderBy: { createdAt: "asc" }, select: { name: true } }).catch(() => null),
+    prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { name: true } }).catch(() => null),
   ]);
   const tasks = stageTasks(balance.stage);
   const signedUp = stagePeople(balance.stage).filter((person) => person.signedUp).length;

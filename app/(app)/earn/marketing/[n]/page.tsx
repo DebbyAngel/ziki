@@ -5,12 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { formatZ } from "@/lib/points/rules";
 import { EARN_TASKS, EARN_WORK, WITHDRAW_THRESHOLD, zikiTaskPath } from "@/lib/earn/draft";
 import { paidCount, taskStateFor, type EarnTaskState } from "@/lib/earn/progress";
-import { earnState, startIfAgentConnected } from "@/lib/earn/state";
+import { earnState, requireEarnAgent, startIfAgentConnected } from "@/lib/earn/state";
 import { startEarnTaskAction } from "@/app/(app)/earn/actions";
 import { EarnSubmitForm } from "@/components/earn-submit-form";
 import { EarnTopStrip } from "@/components/earn-top-strip";
 import { EarnCelebrate } from "@/components/earn-celebrate";
 import { agentsLink, agentsPrimaryBtn, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
+import { earnAgentWhere } from "@/lib/earn/earner";
 
 export const metadata = { title: "Marketing task" };
 
@@ -41,6 +42,7 @@ export default async function EarnTaskPage({
   if (!Number.isInteger(n) || n < 1 || n > EARN_TASKS.length) notFound();
   const user = await requireUser();
   const query = await searchParams;
+  await requireEarnAgent(user.id);
   await startIfAgentConnected(user.id);
   const { rows, balance } = await earnState(user.id);
   const index = n - 1;
@@ -52,7 +54,7 @@ export default async function EarnTaskPage({
     where: { userId_taskKey: { userId: user.id, taskKey: task.id } },
     select: { status: true, proof: true, note: true },
   });
-  const agent = await prisma.agent.findFirst({ where: { ownerUserId: user.id, revokedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, avatar: true } }).catch(() => null);
+  const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true, name: true, avatar: true } }).catch(() => null);
   const agentName = agent?.name ?? "Your agent";
   const next = EARN_TASKS[index + 1];
   const beat = state === "in-progress" ? 0 : state === "in-review" ? 1 : state === "paid" ? 2 : -1;

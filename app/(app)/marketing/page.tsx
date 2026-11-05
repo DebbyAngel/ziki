@@ -1,11 +1,11 @@
 import Link from "next/link";
-import "../[project]/issues/new/create-issue.css";
+import "../[org]/[project]/issues/new/create-issue.css";
 import { requireUser } from "@/lib/auth-helpers";
-import { firstProjectSlugFor, requireProject } from "@/lib/project-route";
+import { firstProjectRefFor, requireProject } from "@/lib/project-route";
 import { toSingleQueryParam } from "@/lib/search";
 import { LocalTime } from "@/components/local-time";
 import { ReportIssueModal } from "@/components/report-issue-modal";
-import { loadReportFormData } from "../[project]/issues/new/load-form-data";
+import { loadReportFormData } from "../[org]/[project]/issues/new/load-form-data";
 import { workflowFor } from "@/lib/workflow";
 import {
   MARKETING_STAGES,
@@ -128,8 +128,8 @@ export default async function MarketingPage({
   const stage = marketingStageFrom(toSingleQueryParam(query.stage));
   const wantsNewTask = toSingleQueryParam(query.new) === "1";
 
-  const slug = await firstProjectSlugFor(user.id);
-  if (!slug) {
+  const ref = await firstProjectRefFor(user.id);
+  if (!ref) {
     return (
       <section className="space-y-6">
         <h1 className="text-2xl font-extrabold tracking-tight text-zk-text">Tasks</h1>
@@ -143,11 +143,14 @@ export default async function MarketingPage({
     );
   }
 
-  const { project } = await requireProject(slug, MARKETING_PAGE);
+  // /marketing carries no project in its address, so it opens the same first
+  // project the site root does, spelled as `<org>/<project>` (#project-urls).
+  const [orgParam, projectParam] = ref.split("/");
+  const { project } = await requireProject(orgParam, projectParam);
   const [counts, rows, report, threshold] = await Promise.all([
     marketingStageCounts(project.id),
-    marketingStageRows({ id: project.id, slug: project.slug }, stage),
-    wantsNewTask ? loadReportFormData(project.slug) : Promise.resolve(null),
+    marketingStageRows(project, stage),
+    wantsNewTask ? loadReportFormData(orgParam, projectParam) : Promise.resolve(null),
     wantsNewTask ? workflowFor(project.id).then((workflow) => workflow.ideaThreshold) : Promise.resolve(null),
   ]);
 

@@ -5,6 +5,7 @@ import { formatZ } from "@/lib/points/rules";
 import { CONVERSION_BONUS, EARN_POST_OPENS, stagePeople, type Reached } from "@/lib/earn/draft";
 import { earnBalanceFor } from "@/lib/earn/state";
 import { agentsLink, agentsMutedClass, agentsPrimaryBtn, agentsSecondaryBtn, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
+import { earnAgentWhere } from "@/lib/earn/earner";
 
 export const metadata = { title: "People you reached" };
 
@@ -29,7 +30,7 @@ export default async function EarnPeoplePage() {
   const user = await requireUser();
   const [balance, agent] = await Promise.all([
     earnBalanceFor(user.id),
-    prisma.agent.findFirst({ where: { ownerUserId: user.id, revokedAt: null }, orderBy: { createdAt: "asc" }, select: { name: true } }).catch(() => null),
+    prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { name: true } }).catch(() => null),
   ]);
   const agentName = agent?.name ?? "Your agent";
   const people = stagePeople(balance.stage).sort((a, b) => reach(b) - reach(a));

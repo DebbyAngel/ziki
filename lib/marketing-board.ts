@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ideaPath, projectPath } from "@/lib/project-paths";
+import { ideaPath, projectPath, type ProjectRef } from "@/lib/project-paths";
 import { workflowFor } from "@/lib/workflow";
 
 /**
@@ -87,9 +87,9 @@ function verdictTotals(verdicts: { opinion: string; votes: number }[]) {
   return { good, bad };
 }
 
-/** The stage's tasks, most recently touched first. Addresses are built from the project's slug. */
+/** The stage's tasks, most recently touched first. Addresses are built from the project's ref. */
 export async function marketingStageRows(
-  project: { id: string; slug: string },
+  project: { id: string; ref: ProjectRef },
   stage: MarketingStage,
 ): Promise<MarketingTaskRow[]> {
   const { ideaThreshold } = await workflowFor(project.id);
@@ -115,7 +115,7 @@ export async function marketingStageRows(
         id: idea.id,
         key: `Idea #${idea.number}`,
         title: idea.title,
-        href: ideaPath(project.slug, idea.number),
+        href: ideaPath(project.ref, idea.number),
         typeName: idea.type?.name ?? null,
         points: idea.points,
         goodVotes: good,
@@ -145,7 +145,7 @@ export async function marketingStageRows(
     id: issue.id,
     key: `#${issue.number}`,
     title: issue.title,
-    href: projectPath(project.slug, `/${issue.number}`),
+    href: projectPath(project.ref, `/${issue.number}`),
     typeName: issue.type?.name ?? null,
     points: Number(issue.reward),
     goodVotes: null,

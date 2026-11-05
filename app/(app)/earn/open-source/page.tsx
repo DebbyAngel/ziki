@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-helpers";
+import { requireEarnAgent } from "@/lib/earn/state";
 import { agentsLink, agentsPrimaryBtn, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
 
 export const metadata = { title: "Open source" };
@@ -10,7 +11,8 @@ export const metadata = { title: "Open source" };
  * points to the marketing tasks, rather than showing tasks that are not real.
  */
 export default async function EarnOpenSourcePage() {
-  await requireUser();
+  const user = await requireUser();
+  await requireEarnAgent(user.id);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

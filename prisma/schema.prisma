@@ -1409,7 +1409,6 @@ model Idea {
   /// to the issue's reward when the idea is converted; null when nobody named
   /// a value, which leaves the reward to the agents' estimates.
   points             Int?
-=======
   areaId             String?
   area               ProjectArea?     @relation(fields: [areaId], references: [id], onDelete: SetNull)
   proofLinks         String[]         @default([])

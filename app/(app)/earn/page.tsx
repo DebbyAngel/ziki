@@ -2,16 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import { isEarner } from "@/lib/earn/earner";
 import { EARN_TASKS, WITHDRAW_THRESHOLD, stageTasks } from "@/lib/earn/draft";
 import { earnState } from "@/lib/earn/state";
+import { EarnLanding } from "@/components/earn-landing";
 import { formatZ } from "@/lib/points/rules";
-import { agentsLink, agentsPrimaryBtn, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
+import { agentsLink, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
+import { earnAgentWhere } from "@/lib/earn/earner";
 
 export const metadata = { title: "Earn with your agent" };
 
 const RING = 2 * Math.PI * 24;
-const STEPS = ["Copy the setup text", "Paste it into your agent", "Pick a project for it"];
 
 /**
  * Earn with your agent (#earn-drafts, Mark's call of 5 Nov): the one page for
@@ -20,16 +20,17 @@ const STEPS = ["Copy the setup text", "Paste it into your agent", "Pick a projec
  * next: Ziki's own projects. People who are already earning are sent to
  * My agents for their agents and to Earnings for their money.
  */
-export default async function EarnPage() {
+export default async function EarnPage({ searchParams }: { searchParams: Promise<{ connected?: string }> }) {
   const user = await requireUser();
-  const earner = await isEarner(user.id);
-  const agent = earner
-    ? await prisma.agent.findFirst({ where: { ownerUserId: user.id, revokedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, name: true, avatar: true, username: true } }).catch(() => null)
-    : null;
+  // Just connected an agent: always land here, on choosing what it works on, whatever else the person has done.
+  const justConnected = (await searchParams).connected === "1";
+  const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true } }).catch(() => null);
   const { stage, started } = await earnState(user.id);
+  // Someone who has just arrived, with no agent yet, gets the page of its own (the layout drops the site's chrome for it).
+  if (!agent) return <EarnLanding />;
   // Mark's four pages: this one is only for someone who has just arrived. Once an earner has started
   // (a task begun or paid), they have a different job: seeing how their agent is doing, on Earnings.
-  if (earner && (stage !== "new" || started !== null)) redirect("/earn/earnings");
+  if (!justConnected && (stage !== "new" || started !== null)) redirect("/earn/earnings");
 
   const paidTasks = stageTasks(stage).filter((task) => task.done).length;
   const maxPay = Math.max(...EARN_TASKS.map((task) => task.pay));
@@ -66,47 +67,13 @@ export default async function EarnPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-10">
-      {agent ? null : (
-      <section className="flex flex-col gap-5">
-        <h1 className="max-w-2xl text-balance text-4xl font-extrabold leading-[1.1] tracking-tight text-zk-text">
-          Put your agent to work. Get paid when it ships.
-        </h1>
-        <>
-            <p className="max-w-xl text-base leading-relaxed text-zk-text2">
-              Connect the AI agent you already use. It picks up real tasks on Ziki, and you earn for every one that gets accepted.
-            </p>
-            <ol className="m-0 flex max-w-xl list-none flex-col gap-3 p-0">
-              {STEPS.map((step, index) => (
-                <li key={step} className="flex items-center gap-3 text-[15px] font-semibold text-zk-text">
-                  <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zk-tint text-xs font-bold text-zk-info-fg">{index + 1}</span>
-                  {step}
-                </li>
-              ))}
-            </ol>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <Link href="/earn/start" className={agentsPrimaryBtn}>Connect my agent</Link>
-              <span className="text-sm text-zk-muted">Your agent can wait here for work at no cost.</span>
-            </div>
-        </>
-      </section>
-      )}
 
-      {agent ? (
-        <>
-      {/* Information, not your balance (that is in the header): what it takes to reach the first withdrawal. */}
-      <section aria-label="How you get to your first withdrawal" className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[20px] bg-zk-tint px-5 py-4">
-        <p className="text-2xl font-extrabold tracking-tight tabular-nums text-zk-text">{formatZ(WITHDRAW_THRESHOLD)}</p>
-        <p className="min-w-0 flex-1 basis-72 text-sm leading-relaxed text-zk-text2">
-          <span className="font-bold text-zk-text">Your first withdrawal.</span> Do the marketing tasks, then Open source pays the rest.
-        </p>
-      </section>
-
-
-      <section aria-labelledby="projects-heading" className="space-y-4">
+      <>
+            <section aria-labelledby="projects-heading" className="space-y-4">
         <div className="space-y-1">
           <h2 id="projects-heading" className="text-2xl font-extrabold tracking-tight text-zk-text">What should it work on?</h2>
           <p className="max-w-xl text-sm text-zk-text2">
-            {earner ? "Pick one. Each has its own page with the tasks your agent can do, and you can switch any time." : "Connect your agent first, then pick one. Each has its own page with the tasks your agent can do."}
+            Pick one. Each has its own page with the tasks your agent can do, and you can switch any time.
           </p>
         </div>
 
@@ -144,12 +111,10 @@ export default async function EarnPage() {
               const base = `${agentsSurface} flex items-center gap-4 p-4 sm:p-5`;
               return (
                 <li key={row.title}>
-                  {earner ? (
+                  {(
                     <Link href={row.href} className={`${base} transition hover:border-electric-blue/50 hover:shadow-[0_10px_28px_rgba(11,23,51,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-electric-blue`}>
                       {inner}
                     </Link>
-                  ) : (
-                    <div className={base}>{inner}</div>
                   )}
                 </li>
               );
@@ -184,8 +149,7 @@ export default async function EarnPage() {
           Withdrawals open at {formatZ(WITHDRAW_THRESHOLD)}. <Link href="/earn/earnings" className={agentsLink}>See the way there</Link>
         </p>
       </section>
-        </>
-      ) : null}
+      </>
 
       <p className="text-sm text-zk-muted">
         Here to build something instead? <Link href="/tenants" className={agentsLink}>Start a project</Link>
