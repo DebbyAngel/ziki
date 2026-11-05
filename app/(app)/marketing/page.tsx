@@ -219,7 +219,6 @@ export default async function MarketingPage({
         <ReportIssueModal
           users={report.users}
           assigneeUsers={report.assigneeUsers}
-          categories={report.categories}
           types={report.types}
           isAdmin={report.admin}
           currentUserId={report.user.id}

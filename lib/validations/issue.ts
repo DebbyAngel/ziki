@@ -112,7 +112,6 @@ export const createBugSchema = z
     deliveryFormat: deliveryFormatSchema,
     points: pointsSchema,
     assigneeId: userIdSchema.optional().or(z.literal("")),
-    categoryId: z.string().optional().or(z.literal("")),
     areaId: z.string().optional().or(z.literal("")),
     proofLinks: proofLinksInputSchema,
   })
@@ -122,7 +121,6 @@ export const updateBugSchema = z.object({
   status: statusSchema.optional(),
   typeId: z.string().nullable().optional().or(z.literal("")),
   assigneeId: userIdSchema.nullable().optional().or(z.literal("")),
-  categoryId: z.string().nullable().optional().or(z.literal("")),
   areaId: z.string().nullable().optional().or(z.literal("")),
 });
 
@@ -153,16 +151,6 @@ export const editProofLinksSchema = z
   })
   .strict();
 
-export const categorySchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "Platform name must be at least 2 characters")
-    .max(50, "Platform name must be at most 50 characters"),
-});
-
-/** Alias for categorySchema matching the user-facing Platform domain terminology (#355). */
-export const platformSchema = categorySchema;
 
 /**
  * A comment (#entry-replies-only): a plain reply to exactly one stage entry,

@@ -30,7 +30,6 @@ import { DELIVERY_FORMATS, DELIVERY_FORMAT_HELPER } from "@/lib/delivery-formats
 const TITLE_MAX_LENGTH = 200;
 
 type UserOption = { id: string; name: string; role: AppRole; image?: string | null };
-type CategoryOption = { id: string; name: string };
 type TypeOption = {
   id: string;
   name: string;
@@ -45,14 +44,12 @@ const FIELD_LABELS: Record<string, string> = {
   typeId: "Type",
   deliveryFormat: "Delivery Format",
   points: "Points",
-  categoryId: "Platform",
   description: "Description",
   proofLinks: "GitHub PR",
 };
 
 export function CreateIssueForm({
   users,
-  categories = [],
   types = [],
   currentUserId,
   projectId,
@@ -65,7 +62,6 @@ export function CreateIssueForm({
 }: {
   users: UserOption[];
   assigneeUsers?: UserOption[];
-  categories?: CategoryOption[];
   types?: TypeOption[];
   isAdmin: boolean;
   currentUserId?: string;
@@ -138,7 +134,6 @@ export function CreateIssueForm({
       points: "",
       whyThisHelps: "",
       description: initialDescription(templateOf(taskModal ? "" : defaultTypeId)),
-      categoryId: "",
       proofLinks: "",
     },
   );
@@ -288,28 +283,6 @@ export function CreateIssueForm({
         typeField
       )}
       {deliveryFormatField}
-      {taskModal ? null : (
-      <div className="space-y-1.5">
-        <label htmlFor="categoryId" className="text-sm font-medium text-slate-700">
-          Platform
-        </label>
-        <Select
-          id="categoryId"
-          name="categoryId"
-          value={values.categoryId}
-          onChange={(event) => setValue("categoryId", event.target.value)}
-          {...errs.attrs("categoryId")}
-        >
-          <option value="">Select a platform</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </Select>
-        <FieldError formId={errs.formId} field="categoryId" errors={errs.fieldErrors} />
-      </div>
-      )}
       {inModal ? null : (
         <div className="space-y-1.5">
           <label htmlFor="proofLinks" className="text-sm font-medium text-slate-700">
@@ -366,7 +339,6 @@ export function CreateIssueForm({
         if (values.deliveryFormat) formData.set("deliveryFormat", values.deliveryFormat);
         if (mode === "detailed") {
           formData.set("typeId", values.typeId);
-          formData.set("categoryId", values.categoryId);
           formData.set("proofLinks", values.proofLinks);
           if (values.points) formData.set("points", values.points);
         }

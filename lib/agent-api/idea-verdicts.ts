@@ -386,7 +386,7 @@ async function convertLocked(
   const idea = await tx.idea.findUniqueOrThrow({
     where: { id: locked.id },
     select: {
-      title: true, summary: true, description: true, typeId: true, deliveryFormat: true, points: true, categoryId: true, areaId: true, proofLinks: true,
+      title: true, summary: true, description: true, typeId: true, deliveryFormat: true, points: true, areaId: true, proofLinks: true,
       reporterId: true, beneficiaryUserId: true, createdByAgentId: true,
     },
   });
@@ -403,7 +403,6 @@ async function convertLocked(
       // A task filed with points starts at that offer; the first agent
       // estimate takes the reward over, as it always has (#rewards).
       ...(idea.points === null ? {} : { reward: idea.points }),
-      categoryId: idea.categoryId,
       areaId: idea.areaId,
       proofLinks: idea.proofLinks,
       reporterId: idea.reporterId,

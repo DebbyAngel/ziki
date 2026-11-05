@@ -22,6 +22,9 @@ import { loadOwnAgents } from "@/lib/dashboard-overview";
 import { AgentsDock, type DockAgent } from "@/components/agents-dock";
 import { appVersionLabel } from "@/lib/deployed-version";
 import { agentActivity, agentEarnings } from "@/lib/points/agent-earnings";
+import { earnBalanceFor } from "@/lib/earn/state";
+import { withdrawInfo } from "@/lib/earn/draft";
+import { isEarner } from "@/lib/earn/earner";
 
 export default async function AppLayout({
   children,
@@ -126,6 +129,12 @@ export default async function AppLayout({
     }
   }
 
+  // Earn (#earn-drafts): an earner's money for the header.
+  const earner = await isEarner(user.id).catch(() => false);
+  const earnSample = earner ? await earnBalanceFor(user.id) : null;
+  // The earner's agent bar shows what they have earned, the same amount as the header.
+  if (earnSample) dockAgents = dockAgents.map((agent) => ({ ...agent, earnedPoints: earnSample.earned }));
+
   // #287: one primary-key read; a failure leaves shortcuts on, the default.
   let shortcutsEnabled = true;
   try {
@@ -157,6 +166,8 @@ export default async function AppLayout({
           defaultProjectSlug={defaultProjectSlug}
           reportFormUrl={REPORT_FORM_URL}
           organizationAdmin={tenantId !== null && isOrganizationAdmin(membershipRole, user.role)}
+          earned={earnSample ? earnSample.earned : null}
+          withdraw={earnSample ? withdrawInfo(earnSample.stage, earnSample.earned) : null}
         />
         <main
           id={MAIN_CONTENT_ID}
@@ -170,7 +181,7 @@ export default async function AppLayout({
         </main>
       </div>
       {/* The agents dock keeps the page's foot clear of its floor line itself, as tall as what stands on it. */}
-      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} version={appVersionLabel()} />
+      <AgentsDock agents={dockAgents} defaultProjectSlug={defaultProjectSlug} version={appVersionLabel()} earn={earnSample !== null} />
       <FocusMainOnNavigate />
       <KeyboardShortcuts
         enabled={shortcutsEnabled}

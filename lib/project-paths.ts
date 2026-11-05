@@ -16,6 +16,7 @@ const STATUS_SEGMENT: Record<string, string> = {
   error: "error",
   possibly_delivered: "possibly-delivered",
   your_call: "your-call",
+  your_work: "your-work",
   closed: "closed",
   all: "all",
   rejected: "rejected",
