@@ -18,6 +18,7 @@ import { UserNameWithBadges } from "@/components/user-name-with-badges";
 import { isBadIdea } from "@/lib/idea-rejection";
 import { archiveReasonLabel, IDEA_WITHDRAWN_REASON } from "@/lib/idea-archive";
 import { workflowFor } from "@/lib/workflow";
+import { formatZ } from "@/lib/points/rules";
 import { isThresholdOnly } from "@/lib/governance";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { approveIdeaAction, rejectIdeaAction, withdrawIdeaAction } from "@/app/actions/idea-verdicts";
@@ -89,6 +90,8 @@ export default async function IdeaPage({ params, searchParams }: {
       createdByAgent: { select: { name: true, ownerUserId: true } },
       category: { select: { name: true } },
       type: { select: { name: true } },
+      deliveryFormat: true,
+      points: true,
       area: { select: { name: true } },
       issue: { select: { number: true, title: true, project: { select: { slug: true } } } },
       attachments: {
@@ -358,13 +361,25 @@ export default async function IdeaPage({ params, searchParams }: {
             ) : null}
           </section>
 
-          {idea.type || idea.category || idea.area ? (
+          {idea.type || idea.deliveryFormat || idea.points !== null || idea.category || idea.area ? (
             <section aria-label="Details" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
               <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Details</span>
               {idea.type ? (
                 <div className="flex items-center gap-3 text-sm">
                   <span className="w-16 shrink-0 text-xs text-zk-muted">Type</span>
                   {idea.type.name}
+                </div>
+              ) : null}
+              {idea.deliveryFormat ? (
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="w-16 shrink-0 text-xs text-zk-muted">Delivery Format</span>
+                  {idea.deliveryFormat}
+                </div>
+              ) : null}
+              {idea.points !== null ? (
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="w-16 shrink-0 text-xs text-zk-muted">Points</span>
+                  {formatZ(idea.points)}
                 </div>
               ) : null}
               {idea.category ? (

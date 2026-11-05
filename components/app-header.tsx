@@ -132,7 +132,7 @@ function TopNav({ pathname, projectSlug }: { pathname: string | null; projectSlu
           <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
         </NavIcon>
       </TopNavLink>
-      <TopNavLink href="https://amp.ziki.dev" active={isNavItemActive(pathname, "/marketing")} label="Marketing">
+      <TopNavLink href="/marketing" active={isNavItemActive(pathname, "/marketing")} label="Marketing">
         <NavIcon>
           <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z" />
           <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />

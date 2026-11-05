@@ -9,11 +9,20 @@ type FormProps = Omit<ComponentProps<typeof CreateIssueForm>, "variant" | "onCan
 
 /**
  * Quick report in a modal over the current page (#report-modal). Opened by the
- * intercepted /issues/new route, so a direct visit or refresh still shows the
- * full report page. A native <dialog> gives the focus trap, Esc, an inert
- * background and focus return to whatever opened it.
+ * intercepted /issues/new route, and by the Marketing workspace's "New task"
+ * button. A direct visit or refresh of the report page is not intercepted and
+ * shows the full page instead. A native <dialog> gives the focus trap, Esc, an
+ * inert background and focus return to whatever opened it.
  */
-export function ReportIssueModal(props: FormProps) {
+export function ReportIssueModal({
+  title = "Report an issue",
+  subtitle = "Tell us what happened. We'll sort out the details.",
+  ...props
+}: FormProps & {
+  /** The heading, when the page opening it calls the task something else. */
+  title?: string;
+  subtitle?: string;
+}) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const keepWritingRef = useRef<HTMLButtonElement>(null);
@@ -70,8 +79,8 @@ export function ReportIssueModal(props: FormProps) {
       <div className="relative">
         <div className="report-modal-header">
           <div>
-            <h2 id="report-modal-title">Report an issue</h2>
-            <p id="report-modal-subtitle">Tell us what happened. We&apos;ll sort out the details.</p>
+            <h2 id="report-modal-title">{title}</h2>
+            <p id="report-modal-subtitle">{subtitle}</p>
           </div>
           <button type="button" className="report-modal-close" aria-label="Close" onClick={requestClose}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">

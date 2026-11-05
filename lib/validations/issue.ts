@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { displayNameSchema } from "@/lib/display-name";
+import { DELIVERY_FORMATS } from "@/lib/delivery-formats";
 import { BCRYPT_MAX_PASSWORD_BYTES } from "@/lib/password";
 import { isGitHubUrl, splitProofLinkLines } from "@/lib/proof-links";
+import { REWARD_MAX, REWARD_MIN } from "@/lib/points/rules";
 import { stripGitHubMarkup } from "@/lib/github-paste";
 
 export const statuses = ["open", "in_progress", "done", "merge", "resolved", "closed"] as const;
@@ -58,6 +60,36 @@ export const proofLinksInputSchema = z
     return links;
   });
 
+/**
+ * What the deliverable is handed over as (lib/delivery-formats.ts). Optional:
+ * code work still proves itself with a pull request, and an empty choice is
+ * stored as no choice rather than a guess.
+ */
+export const deliveryFormatSchema = z.enum(DELIVERY_FORMATS).optional().or(z.literal(""));
+
+/**
+ * What the person filing a task offered it for, in $ (#rewards). The same
+ * range agents estimate in, so a named value is one they can still average
+ * over. An empty box is no offer, not a $0 one.
+ */
+export const pointsSchema = z
+  .union([
+    z.literal(""),
+    z
+      .union([z.number(), z.string().trim()])
+      .transform((value, ctx) => {
+        const parsed = typeof value === "number" ? value : Number(value);
+        if (!Number.isInteger(parsed)) {
+          ctx.addIssue({ code: "custom", message: "Points must be a whole number" });
+          return z.NEVER;
+        }
+        return parsed;
+      })
+      .refine((value) => value >= REWARD_MIN, { message: `Points must be at least ${REWARD_MIN}` })
+      .refine((value) => value <= REWARD_MAX, { message: `Points must be at most ${REWARD_MAX}` }),
+  ])
+  .optional();
+
 /** Create payload — status is rejected; the server always sets `open`. */
 export const createBugSchema = z
   .object({
@@ -77,6 +109,8 @@ export const createBugSchema = z
         message: "Description cannot exceed 5000 characters",
       }),
     typeId: z.string().optional().nullable().or(z.literal("")),
+    deliveryFormat: deliveryFormatSchema,
+    points: pointsSchema,
     assigneeId: userIdSchema.optional().or(z.literal("")),
     categoryId: z.string().optional().or(z.literal("")),
     areaId: z.string().optional().or(z.literal("")),

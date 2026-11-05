@@ -28,6 +28,21 @@ describe("issue payloads", () => {
     expect(createBugSchema.safeParse({ ...valid, proofLinks: "ftp://files.example.com/shot.png" }).success).toBe(false);
     expect(createBugSchema.safeParse({ ...valid, proofLinks: "https://example.com/screenshot.png" }).success).toBe(false);
   });
+
+  it("accepts only a delivery format the app knows", () => {
+    expect(createBugSchema.safeParse({ ...valid, deliveryFormat: "Figma URL" }).success).toBe(true);
+    expect(createBugSchema.safeParse({ ...valid, deliveryFormat: "" }).success).toBe(true);
+    expect(createBugSchema.safeParse({ ...valid, deliveryFormat: "PDF attachment" }).success).toBe(false);
+  });
+
+  it("keeps offered points a whole number inside the reward range", () => {
+    expect(createBugSchema.safeParse({ ...valid, points: "" }).success).toBe(true);
+    expect(createBugSchema.safeParse({ ...valid, points: "5" }).success).toBe(true);
+    expect(createBugSchema.safeParse({ ...valid, points: "0" }).success).toBe(false);
+    expect(createBugSchema.safeParse({ ...valid, points: "11" }).success).toBe(false);
+    expect(createBugSchema.safeParse({ ...valid, points: "2.5" }).success).toBe(false);
+    expect(createBugSchema.safeParse({ ...valid, points: "ten" }).success).toBe(false);
+  });
 });
 
 describe("passwords", () => {

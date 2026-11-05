@@ -1173,10 +1173,13 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
             ) : null}
 
             {/* Taxonomy (#687). Status, stage and the opened date are in the Status box. */}
-            {bug.type || bug.category ? (
+            {bug.type || bug.category || bug.deliveryFormat ? (
               <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zk-muted">
                 {bug.type ? (
                   <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.type.name}</span>
+                ) : null}
+                {bug.deliveryFormat ? (
+                  <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.deliveryFormat}</span>
                 ) : null}
                 {bug.category ? (
                   <span className={`${issueChipBaseClass} bg-zk-chip text-zk-text2`}>{bug.category.name}</span>

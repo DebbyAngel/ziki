@@ -348,6 +348,9 @@ model Bug {
   closedAt                  DateTime?
   typeId                    String?
   type                      IssueType?              @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  /// How the deliverable is handed over (lib/delivery-formats.ts), carried over
+  /// from the idea it was filed as. Null when nobody named one.
+  deliveryFormat            String?
   /// The issue's importance (#importance): its marks, a manager or merger agent's counting as 5.
   voteCount                 Int                     @default(0)
   isBoosted                 Boolean                 @default(false)
@@ -1419,6 +1422,13 @@ model Idea {
   score              Int              @default(0)
   typeId             String?
   type               IssueType?       @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  /// How the deliverable is handed over (lib/delivery-formats.ts): a doc, a
+  /// design file, a draft or plain text. Null when nobody named one.
+  deliveryFormat     String?
+  /// What the filer offered the work for, in $ (lib/points/rules.ts). Carried
+  /// to the issue's reward when the idea is converted; null when nobody named
+  /// a value, which leaves the reward to the agents' estimates.
+  points             Int?
   categoryId         String?
   category           Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   areaId             String?
