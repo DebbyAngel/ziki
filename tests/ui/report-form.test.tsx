@@ -290,10 +290,10 @@ describe("marketing task types and the report form", () => {
     issueTypes.findMany.mockResolvedValue([{ id: "fix", name: "Fix", isActive: true }]);
     const { getIssueTypes } = await import("@/lib/lookups");
     await getIssueTypes("t1");
-    expect(issueTypes.findMany.mock.calls[0][0].where).toEqual({ tenantId: "t1", track: "product" });
+    expect(issueTypes.findMany.mock.calls[0][0].where).toEqual({ organisationId: "t1", track: "product" });
   }, 15000);
 
-  it("still sets up the product types in a workspace that only has marketing types", async () => {
+  it("still sets up the product types in an organisation that only has marketing types", async () => {
     issueTypes.count.mockImplementation(async ({ where }: { where: { track?: string } }) => (where.track === "product" ? 0 : 4));
     const { ensureDefaultIssueTypes } = await import("@/lib/issue-types");
     await ensureDefaultIssueTypes("t1");
@@ -330,7 +330,7 @@ describe("marketing task types and the report form", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Say why this is worth doing.");
   }, 15000);
 
-  it("can't be submitted when the workspace has no marketing types", async () => {
+  it("can't be submitted when the organisation has no marketing types", async () => {
     const { NewMarketingTaskForm } = await import("@/components/marketing/tasks/new-marketing-task-form");
     render(<NewMarketingTaskForm projectId="project-1" types={[]} />);
     expect((screen.getByRole("button", { name: "Propose task" }) as HTMLButtonElement).disabled).toBe(true);

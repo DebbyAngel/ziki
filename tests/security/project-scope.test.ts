@@ -51,7 +51,7 @@ const agent = {
   agentId: "agent1",
   name: "Ada's Claude",
   ownerId: "ada",
-  tenantId: "tenant_zedu",
+  organisationId: "organisation_zedu",
   level: "working" as const,
   burst: false,
   keyId: "key1",
@@ -65,7 +65,7 @@ describe("issueProject project scope (#742)", () => {
 
   it("allows a legacy key that is not limited to a project", async () => {
     await expect(issueProject({ ...agent, projectId: null }, new URLSearchParams("projectId=project_web"))).resolves.toEqual({
-      tenantId: "tenant_zedu",
+      organisationId: "organisation_zedu",
       projectId: "project_web",
     });
   });
@@ -97,9 +97,9 @@ describe("Library project isolation", () => {
     expect(publishedTasks).not.toHaveBeenCalled();
   });
 
-  it("returns only published marketing work in the authorized tenant and project, with the latest delivery", async () => {
+  it("returns only published marketing work in the authorized organisation and project, with the latest delivery", async () => {
     const approved = {
-      id: "approved", number: 42, title: "Launch campaign", projectId: "project_web", tenantId: "tenant_zedu",
+      id: "approved", number: 42, title: "Launch campaign", projectId: "project_web", organisationId: "organisation_zedu",
       track: "marketing", status: "resolved", substatus: "published", isDeleted: false,
       deliveries: [
         { id: "new", updatedAt: new Date("2026-11-03"), summary: "Approved version", deliverableUrls: ["https://example.com/final.png"], agent: { name: "Studio" } },
@@ -110,7 +110,7 @@ describe("Library project isolation", () => {
     };
     const records = [approved,
       { ...approved, id: "other-project", projectId: "project_other" },
-      { ...approved, id: "other-tenant", tenantId: "tenant_other" },
+      { ...approved, id: "other-organisation", organisationId: "organisation_other" },
       { ...approved, id: "product", track: "product" },
       { ...approved, id: "unpublished", status: "done", substatus: "accepted" },
       { ...approved, id: "deleted", isDeleted: true },
@@ -118,7 +118,7 @@ describe("Library project isolation", () => {
     publishedTasks.mockImplementation(async ({ where, select }) => records
       .filter((row) => Object.entries(where).every(([key, value]) => row[key as keyof typeof row] === value))
       .map((row) => ({ ...row, deliveries: select.deliveries.orderBy[0].updatedAt === "desc" ? [...row.deliveries].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, select.deliveries.take) : row.deliveries })));
-    const result = await readLibrary({ tenantId: "tenant_zedu", project: { id: "project_web" } } as Parameters<typeof readLibrary>[0]);
+    const result = await readLibrary({ organisationId: "organisation_zedu", project: { id: "project_web" } } as Parameters<typeof readLibrary>[0]);
     expect(result).toEqual([expect.objectContaining({
       id: "approved", agent: "Studio", publishedAt: "2026-11-04T00:00:00.000Z",
       files: [expect.objectContaining({ url: "https://example.com/final.png" })],
@@ -127,8 +127,8 @@ describe("Library project isolation", () => {
 });
 
 describe("the marketing tasks board", () => {
-  const context = { tenantId: "tenant_zedu", user: { id: "ada" }, project: { id: "project_web", slug: "web" } } as Parameters<typeof readTasksBoard>[0];
-  const scope = { tenantId: "tenant_zedu", projectId: "project_web", track: "marketing", isDeleted: false };
+  const context = { organisationId: "organisation_zedu", user: { id: "ada" }, project: { id: "project_web", slug: "web" } } as Parameters<typeof readTasksBoard>[0];
+  const scope = { organisationId: "organisation_zedu", projectId: "project_web", track: "marketing", isDeleted: false };
   const rowsOf = (board: Awaited<ReturnType<typeof readTasksBoard>>) => (board.list.kind === "tasks" ? board.list.rows : []);
 
   beforeEach(() => {
@@ -186,7 +186,7 @@ describe("the marketing tasks board", () => {
   it("names who delivered finished work, but not the last worker of work reopened for bids", async () => {
     const task = {
       id: "t1", number: 41, title: "A launch post", closeReason: null, voteCount: 0, revisionCount: 0, updatedAt: new Date("2026-11-03"), reward: 4,
-      rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", tenant: { slug: "acme" } }, type: null, assignee: null, claims: [],
+      rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", organisation: { slug: "acme" } }, type: null, assignee: null, claims: [],
       deliveries: [{ agent: { name: "Studio" } }], _count: { comments: 0, bids: 0 },
     };
     publishedTasks.mockResolvedValue([{ ...task, status: "resolved", substatus: "published" }]);
@@ -198,7 +198,7 @@ describe("the marketing tasks board", () => {
   it("shows the revision round while work is back with its worker", async () => {
     publishedTasks.mockResolvedValue([{
       id: "t1", number: 41, title: "A launch post", status: "in_progress", substatus: "in_progress", closeReason: null, voteCount: 0, revisionCount: 1,
-      updatedAt: new Date("2026-11-03"), reward: 4, rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", tenant: { slug: "acme" } }, type: null, assignee: null,
+      updatedAt: new Date("2026-11-03"), reward: 4, rewardEstimateCount: 0, rewardFixedAt: null, project: { slug: "web", organisation: { slug: "acme" } }, type: null, assignee: null,
       claims: [], deliveries: [], _count: { comments: 0, bids: 0 },
     }]);
     expect(rowsOf(await readTasksBoard(context, parseTaskView({ status: "in-progress" })))[0].revision).toBe("Revision 1 of 2");
@@ -207,7 +207,7 @@ describe("the marketing tasks board", () => {
 
 describe("Rejected marketing ideas project isolation", () => {
   const context = {
-    tenantId: "tenant_zedu",
+    organisationId: "organisation_zedu",
     project: { id: "project_web" },
     user: { id: "ada" },
   } as Parameters<typeof readRejectedIdeas>[0];
@@ -230,11 +230,11 @@ describe("Rejected marketing ideas project isolation", () => {
     expect(proposals).not.toHaveBeenCalled();
   });
 
-  it("reads rejected and archived marketing ideas only inside the authorized tenant and project", async () => {
+  it("reads rejected and archived marketing ideas only inside the authorized organisation and project", async () => {
     await readRejectedIdeas(context);
     expect(proposals).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        tenantId: "tenant_zedu", projectId: "project_web", track: "marketing",
+        organisationId: "organisation_zedu", projectId: "project_web", track: "marketing",
         status: { in: ["rejected", "archived"] },
       }),
     }));
@@ -260,9 +260,9 @@ describe("the marketing section", () => {
     await expect(MarketingPage()).rejects.toThrow("REDIRECT /acme/web/marketing");
   });
 
-  it("sends someone with no project to their workspaces", async () => {
+  it("sends someone with no project to their organisations", async () => {
     section.firstProjectRefFor.mockResolvedValue(null);
-    await expect(MarketingPage()).rejects.toThrow("REDIRECT /tenants");
+    await expect(MarketingPage()).rejects.toThrow("REDIRECT /organisations");
   });
 });
 
@@ -278,10 +278,10 @@ describe("project addresses carry the organisation (#project-urls)", () => {
 
   it("never lets a new project or organisation take a name an address reads as old or as a site page", async () => {
     const { unreservedProjectSlug } = await import("@/lib/project-slug");
-    const { tenantSlugCandidate } = await import("@/lib/tenants");
+    const { organisationSlugCandidate } = await import("@/lib/organisations");
     expect(unreservedProjectSlug("123")).toBe("123-project");
     expect(unreservedProjectSlug("workstream")).toBe("workstream-project");
-    expect(tenantSlugCandidate("agents", 0, () => "x2y3")).toBe("agents-x2y3");
-    expect(tenantSlugCandidate("zedu", 0)).toBe("zedu");
+    expect(organisationSlugCandidate("agents", 0, () => "x2y3")).toBe("agents-x2y3");
+    expect(organisationSlugCandidate("zedu", 0)).toBe("zedu");
   });
 });

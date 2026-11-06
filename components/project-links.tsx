@@ -294,7 +294,7 @@ export function ProjectLinks({
           ) : null}
         </form>
       ) : (
-        <p className="mt-2 text-[12.5px] text-zk-muted">A workspace owner or admin can add these.</p>
+        <p className="mt-2 text-[12.5px] text-zk-muted">An organisation owner or admin can add these.</p>
       )}
 
     </section>

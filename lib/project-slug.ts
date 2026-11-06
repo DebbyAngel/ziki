@@ -23,7 +23,6 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "r",
   "session-expired",
   // app/(app)/
-  "activity",
   "superadmin",
   "agent",
   "agents",
@@ -54,7 +53,7 @@ export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set([
   "security",
   "settings",
   "team",
-  "tenants",
+  "organisations",
   "users",
   "workers",
   // app/(auth)/

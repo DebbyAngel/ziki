@@ -329,5 +329,5 @@ function MarketingRow({ row, stage }: { row: MarketingTaskRow; stage: MarketingS
 export default async function MarketingPage() {
   const user = await requireUser();
   const slug = await firstProjectRefFor(user.id);
-  redirect(slug ? marketingPath(slug) : "/tenants");
+  redirect(slug ? marketingPath(slug) : "/organisations");
 }

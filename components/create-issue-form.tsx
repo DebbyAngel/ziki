@@ -332,7 +332,7 @@ export function CreateIssueForm({
         );
         formData.set("attachmentIds", attachmentIds.join(","));
         formData.set("isReport", mode === "report" ? "true" : "false");
-        // The project the form was opened in (#project-urls); the action checks it is in the workspace.
+        // The project the form was opened in (#project-urls); the action checks it is in the organisation.
         if (projectId) formData.set("projectId", projectId);
         // What the deliverable is handed over as. Asked in both modes, because a
         // quick marketing report still has to say so (lib/delivery-formats.ts).
@@ -534,6 +534,53 @@ export function CreateIssueForm({
         {sideHasFields ? (
           <aside className="create-side create-fields space-y-4" aria-label="Issue details">
             {detailFields}
+            {mode === "detailed" && types.length > 0 ? (
+              <div className="space-y-1.5">
+                <label htmlFor="typeId" className="text-sm font-medium text-slate-700">
+                  Type
+                </label>
+                <Select
+                  id="typeId"
+                  name="typeId"
+                  value={values.typeId}
+                  onChange={(event) => void changeType(event.target.value)}
+                  {...errs.attrs("typeId")}
+                >
+                  {types.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </Select>
+                <FieldError formId={errs.formId} field="typeId" errors={errs.fieldErrors} />
+              </div>
+            ) : null}
+          {mode === "detailed" ? (
+            <div className="space-y-1.5">
+              <label
+                htmlFor="proofLinks"
+                className="text-sm font-medium text-slate-700"
+              >
+                GitHub PR
+              </label>
+              <Textarea
+                id="proofLinks"
+                name="proofLinks"
+                rows={3}
+                placeholder={
+                  "https://github.com/organisation/repo/pull/123"
+                }
+                value={values.proofLinks}
+                onChange={(event) => setValue("proofLinks", event.target.value)}
+                {...errs.attrs("proofLinks")}
+              />
+              <FieldError formId={errs.formId} field="proofLinks" errors={errs.fieldErrors} />
+              <p className="text-xs text-zk-muted">
+                Optional. One GitHub link per line (e.g. https://github.com/organisation/repo/pull/123).
+              </p>
+            </div>
+          ) : null}
+
           </aside>
         ) : null}
       </div>
