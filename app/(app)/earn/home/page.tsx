@@ -7,10 +7,19 @@ import { earnState } from "@/lib/earn/state";
 import { formatZ } from "@/lib/points/rules";
 import { agentsLink, agentsSurface } from "@/app/(app)/settings/agents/agents-ui";
 import { earnAgentWhere } from "@/lib/earn/earner";
+import { taskProgress, type EarnTaskProgressView } from "@/lib/earn/progress";
 
 export const metadata = { title: "Earn with your agent" };
 
 const RING = 2 * Math.PI * 24;
+
+/** What a task's bar says beside it: the count for a counted task, otherwise where the task is. */
+function glanceStatus({ state, done, target }: EarnTaskProgressView): string {
+  if (state === "paid") return "Paid";
+  if (state === "in-review") return target > 1 ? `${done} of ${target} · in review` : "In review";
+  if (state === "open") return "Not started";
+  return target > 1 ? `0 of ${target}` : "Not done yet";
+}
 
 /**
  * Earn with your agent (#earn-drafts, Mark's call of 5 Nov): the one page for
@@ -22,12 +31,13 @@ const RING = 2 * Math.PI * 24;
 export default async function EarnHomePage() {
   const user = await requireUser();
   const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true } }).catch(() => null);
-  const { stage } = await earnState(user.id);
+  const { stage, rows: taskRows } = await earnState(user.id);
   // No agent yet: connecting it comes first.
   if (!agent) redirect("/earn/agent");
 
   const paidTasks = stageTasks(stage).filter((task) => task.done).length;
-  const maxPay = Math.max(...EARN_TASKS.map((task) => task.pay));
+  // Each task's real progress, from its row: never a stand-in.
+  const glance = taskProgress(taskRows);
   // Open source opens once the marketing tasks are done, not at $30: the rest of the $30 is earned there.
   const unlocked = paidTasks === EARN_TASKS.length;
   const rows = [
@@ -36,7 +46,7 @@ export default async function EarnHomePage() {
       title: "Marketing",
       tag: "Starter",
       tagTone: "bg-zk-info-bg text-zk-info-fg",
-      text: "Where your agent takes its first task: help people find Ziki, one task at a time.",
+      text: "Where your agent takes its first task: help people find Ziki with four short tasks, in any order.",
       ringText: String(EARN_TASKS.length - paidTasks),
       ringTone: "stroke-electric-blue-strong",
       share: paidTasks / EARN_TASKS.length || 0.04,
@@ -118,20 +128,36 @@ export default async function EarnHomePage() {
           <aside aria-labelledby="glance-heading" className={`${agentsSurface} space-y-4 p-5`}>
             <div>
               <h3 id="glance-heading" className="text-base font-extrabold tracking-tight text-zk-text">Marketing at a glance</h3>
-              <p className="text-xs text-zk-muted">Four tasks, done one at a time.</p>
+              <p className="text-xs text-zk-muted">Four tasks, all open at once.</p>
             </div>
             <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
-              {EARN_TASKS.map((task) => (
-                <li key={task.id} className="space-y-1.5">
-                  <span className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate font-semibold text-zk-text">{task.title}</span>
-                    <span className="font-mono text-xs font-bold tabular-nums text-zk-ok-fg">+${task.pay}</span>
-                  </span>
-                  <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-zk-seg">
-                    <span className="block h-full rounded-full bg-zk-accent/70" style={{ width: `${(task.pay / maxPay) * 100}%` }} />
-                  </span>
-                </li>
-              ))}
+              {glance.map((item) => {
+                const { task, state, done, target } = item;
+                const status = glanceStatus(item);
+                return (
+                  <li key={task.id} className="space-y-1.5">
+                    <span className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate font-semibold text-zk-text">{task.title}</span>
+                      <span className="font-mono text-xs font-bold tabular-nums text-zk-ok-fg">+${task.pay}</span>
+                    </span>
+                    <span
+                      role="progressbar"
+                      aria-label={task.title}
+                      aria-valuemin={0}
+                      aria-valuemax={target}
+                      aria-valuenow={done}
+                      aria-valuetext={status}
+                      className="block h-1.5 overflow-hidden rounded-full bg-zk-seg"
+                    >
+                      <span
+                        className={`block h-full rounded-full transition-[width] duration-500 ease-out ${state === "paid" ? "bg-zk-ok-fg" : "bg-zk-accent/70"}`}
+                        style={{ width: `${(done / target) * 100}%` }}
+                      />
+                    </span>
+                    <span className="block text-xs tabular-nums text-zk-muted">{status}</span>
+                  </li>
+                );
+              })}
             </ul>
           </aside>
         </div>

@@ -24,9 +24,9 @@ export default async function EarningsPage() {
   const user = await requireUser();
   const balance = await earnBalanceFor(user.id);
   const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true, name: true, avatar: true, username: true } }).catch(() => null);
-  const info = withdrawInfo(balance.stage, balance.earned);
+  const info = withdrawInfo(balance.stage, balance.earned, balance.done);
   const ready = balance.withdrawable > 0;
-  const taskPay = stageTasks(balance.stage).filter((task) => task.done).reduce((sum, task) => sum + task.pay, 0);
+  const taskPay = stageTasks(balance.stage, balance.done).filter((task) => task.done).reduce((sum, task) => sum + task.pay, 0);
   const fromPerson = balance.converted ? CONVERSION_BONUS : 0;
   const left = Math.max(0, WITHDRAW_THRESHOLD - balance.earned);
 

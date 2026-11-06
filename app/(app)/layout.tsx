@@ -183,7 +183,7 @@ export default async function AppLayout({
           reportFormUrl={REPORT_FORM_URL}
           organizationAdmin={tenantId !== null && isOrganizationAdmin(membershipRole, user.role)}
           earned={earnSample ? earnSample.earned : null}
-          withdraw={earnSample ? withdrawInfo(earnSample.stage, earnSample.earned) : null}
+          withdraw={earnSample ? withdrawInfo(earnSample.stage, earnSample.earned, earnSample.done) : null}
           version={appVersionLabel()}
           memberCount={memberCount}
           agentCount={dockAgents.length}

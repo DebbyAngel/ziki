@@ -1065,7 +1065,7 @@ export async function IssuesList({
   // The In Progress tab opens on the Ziki tasks (its link points there); Open and the rest stay normal.
   const onZikiTasks = zikiTasks;
 
-  const listContent = onZikiTasks && earnStage ? <ZikiTasksTable stage={earnStage} started={earn?.started ?? null} /> : (
+  const listContent = onZikiTasks && earnStage ? <ZikiTasksTable stage={earnStage} done={earn?.balance.done} /> : (
     <div className="space-y-4">
         {statusParam === "resolved" && !isDeletedView ? <LiveRefresh /> : null}
         {statusParam === "resolved" && liveTabChecks.size > 0 ? (

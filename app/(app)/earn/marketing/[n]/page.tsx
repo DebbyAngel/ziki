@@ -4,8 +4,8 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { formatZ } from "@/lib/points/rules";
 import { EARN_TASKS, EARN_WORK, WITHDRAW_THRESHOLD, zikiTaskPath } from "@/lib/earn/draft";
-import { paidCount, taskStateFor, type EarnTaskState } from "@/lib/earn/progress";
-import { earnState, requireEarnAgent, startIfAgentConnected } from "@/lib/earn/state";
+import { taskStateFor, type EarnTaskState } from "@/lib/earn/progress";
+import { earnState, requireEarnAgent, startTaskIfAgentConnected } from "@/lib/earn/state";
 import { startEarnTaskAction } from "@/app/(app)/earn/actions";
 import { EarnSubmitForm } from "@/components/earn-submit-form";
 import { EarnCelebrate } from "@/components/earn-celebrate";
@@ -44,23 +44,25 @@ export default async function EarnTaskPage({
   const user = await requireUser();
   const query = await searchParams;
   await requireEarnAgent(user.id);
-  await startIfAgentConnected(user.id);
+  // Opening a task starts it (once), so it has a status from here on and not before.
+  await startTaskIfAgentConnected(user.id, n);
   const { rows, balance } = await earnState(user.id);
   const index = n - 1;
   const task = EARN_TASKS[index];
   const work = EARN_WORK[task.id];
   const ui = EARN_TASK_UI[task.id];
   const state: EarnTaskState = taskStateFor(rows, index);
-  const paid = paidCount(rows);
   const row = await prisma.earnTaskProgress.findUnique({
     where: { userId_taskKey: { userId: user.id, taskKey: task.id } },
     select: { status: true, proof: true, note: true },
   });
   const agent = await prisma.agent.findFirst({ where: earnAgentWhere(user.id), orderBy: { createdAt: "asc" }, select: { id: true, name: true, avatar: true } }).catch(() => null);
   const agentName = agent?.name ?? "Your agent";
-  const next = EARN_TASKS[index + 1];
+  // Every task is open, so "next" is any other task that isn't paid yet, the first after this one if there is one.
+  const others = EARN_TASKS.map((candidate, i) => ({ candidate, i })).filter(({ i }) => i !== index && taskStateFor(rows, i) !== "paid");
+  const nextOpen = others.find(({ i }) => i > index) ?? others[0];
   const beat = state === "in-progress" ? 0 : state === "in-review" ? 1 : state === "paid" ? 2 : -1;
-  const celebrate = state === "paid" && query.celebrate === "1" && index === paid - 1;
+  const celebrate = state === "paid" && query.celebrate === "1";
   const sentBack = row?.status === "rejected";
 
   return (
@@ -96,13 +98,7 @@ export default async function EarnTaskPage({
           </ol>
         ) : null}
 
-        {state === "locked" ? (
-          <section className={`${agentsSurface} space-y-2 p-5 sm:p-6`}>
-            <h2 className="text-lg font-extrabold text-zk-text">Opens after task {n - 1}</h2>
-            <p className="text-sm text-zk-text2">Tasks go one at a time, and each builds on the one before.</p>
-            <Link href={zikiTaskPath(n - 1)} className={`text-sm ${agentsLink}`}>Go to task {n - 1}: {EARN_TASKS[n - 2].title} →</Link>
-          </section>
-        ) : state === "open" ? (
+        {state === "open" ? (
           <section className={`${agentsSurface} space-y-3 p-5 sm:p-6`}>
             <h2 className="text-lg font-extrabold text-zk-text">Ready when you are</h2>
             {agent ? (
@@ -112,6 +108,7 @@ export default async function EarnTaskPage({
             )}
             <div className="flex flex-wrap items-center gap-3">
               <form action={startEarnTaskAction}>
+                <input type="hidden" name="n" value={n} />
                 <button type="submit" className={agentsPrimaryBtn}>Start this task</button>
               </form>
               {agent ? null : <Link href="/earn/agent" className={`text-sm ${agentsLink}`}>Connect my agent</Link>}
@@ -126,8 +123,8 @@ export default async function EarnTaskPage({
           <section className={`${agentsSurface} space-y-3 p-5 sm:p-6`}>
             <h2 className="text-lg font-extrabold text-zk-text">Paid</h2>
             <p className="text-sm text-zk-text2">+{formatZ(task.pay)} is in your balance.</p>
-            {next ? (
-              <Link href={zikiTaskPath(n + 1)} className={agentsPrimaryBtn}>Next: {next.title}</Link>
+            {nextOpen ? (
+              <Link href={zikiTaskPath(nextOpen.i + 1)} className={agentsPrimaryBtn}>Next: {nextOpen.candidate.title}</Link>
             ) : (
               <Link href="/earn/earnings" className={agentsPrimaryBtn}>All four done. See your earnings</Link>
             )}
