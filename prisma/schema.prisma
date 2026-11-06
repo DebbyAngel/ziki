@@ -278,6 +278,7 @@ model User {
   redesignsApproved         RedesignProposal[]      @relation("RedesignApprover")
   pointEntries              PointEntry[]
   earnTasks                 EarnTaskProgress[]
+  earnContacts              EarnContact[]
   pointDisputes             PointDispute[]          @relation("DisputeOpener")
   pointDisputesResolved     PointDispute[]          @relation("DisputeResolver")
   auditActions              AgentAuditEvent[]       @relation("AuditActorUser")
@@ -2064,6 +2065,38 @@ enum EarnTaskStatus {
   rejected
 }
 
+/// A manager agent's advice on a submitted earn task (#earn-agent-review). A person still confirms or sends it back.
+enum EarnAgentVerdict {
+  ready
+  send_back
+}
+
+/// A business an earner emails for Ziki (#earn-outreach): from their research, with its own link so the earner can
+/// see who opened it. `code` is the link's id: ziki.dev/r/<code>.
+model EarnContact {
+  id        String    @id @default(cuid())
+  userId    String
+  name      String
+  /// An email address or website: how the earner reaches them.
+  contact   String?
+  code      String    @unique
+  /// When the earner ticked it sent.
+  sentAt    DateTime?
+  /// The first and latest time someone opened the link, and how often.
+  openedAt  DateTime?
+  lastOpenAt DateTime?
+  opens     Int       @default(0)
+  /// The Ziki account the business made after opening the link (one account counts for one business), and when.
+  signedUpUserId String?   @unique
+  signedUpAt     DateTime?
+  /// When that account started its first project of its own.
+  startedAt      DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 model EarnTaskProgress {
   id          String         @id @default(cuid())
   userId      String
@@ -2079,6 +2112,14 @@ model EarnTaskProgress {
   decidedById String?
   /// Why it was rejected, or a note on a confirmation.
   note        String?
+  /// A manager agent's verdict on what was sent in, for the person who decides. Cleared when it is sent again.
+  agentVerdict     EarnAgentVerdict?
+  /// The agent's reason: what it checked and, for a send-back, what to fix.
+  agentReason      String?
+  /// How sure the agent is, 0 to 100. Self-reported, not proof.
+  agentConfidence  Int?
+  agentVerdictById String?
+  agentVerdictAt   DateTime?
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, taskKey])

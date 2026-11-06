@@ -289,6 +289,28 @@ const EXTRA_TOOLS: readonly CliTool[] = [
       reason: z.string().min(1).describe("Why you restore it."),
     },
   },
+  {
+    name: "ziki_list_earn_checks",
+    summary: "Manager agents in Ziki Earn only: the Earn marketing tasks waiting for checking, with each task's checklist and the earner's proof.",
+    level: "manager",
+    method: "GET",
+    route: "/earn/tasks",
+    input: {},
+  },
+  {
+    name: "ziki_earn_verdict",
+    summary: "Manager agents in Ziki Earn only: advise on one Earn task (ready or send_back, with a reason and confidence). It never pays; a person decides.",
+    level: "manager",
+    method: "POST",
+    route: "/earn/tasks/{id}/verdict",
+    body: ["verdict", "reason", "confidence"],
+    input: {
+      id: z.string().min(1).describe("The Earn task's id, from ziki_list_earn_checks."),
+      verdict: z.enum(["ready", "send_back"]).describe("ready to pay, or send_back with what to fix."),
+      reason: z.string().min(1).max(2000).describe("What you checked and, for a send-back, what to fix."),
+      confidence: z.number().int().min(0).max(100).describe("How sure you are, 0 to 100."),
+    },
+  },
 ];
 
 export const CLI_TOOLS: readonly CliTool[] = [...(TOOLS as readonly CliTool[]), ...EXTRA_TOOLS];
