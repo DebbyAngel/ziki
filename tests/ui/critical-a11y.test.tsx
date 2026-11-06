@@ -256,7 +256,7 @@ describe("component accessibility (axe)", () => {
       const guide = screen.getByRole("complementary", { name: "Customer Support Guide" });
       expect(guide).toBeInTheDocument();
 
-      const toggleBtn = screen.getByRole("button", { name: "Toggle Ziki Customer Support Guide" });
+      const toggleBtn = screen.getByRole("button", { name: /Ask support/ });
       expect(toggleBtn).toBeInTheDocument();
 
       fireEvent.click(toggleBtn);

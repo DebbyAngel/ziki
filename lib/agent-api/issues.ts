@@ -70,6 +70,9 @@ export async function agentIssueRequest(
   try {
     agent = await requireAgent(request);
     requireLevel(agent, level === "read" ? "working" : level);
+    if (agent.pausedAt && action !== "claims.heartbeat" && (action === "work.read" || level !== "read" || options.budget === "write")) {
+      throw new IssueApiError(423, "This agent is paused by its owner.");
+    }
     if (options.budget === "none") {
       // Retired or non-working routes must not spend the caller's budget (#554).
       response = await run(agent);

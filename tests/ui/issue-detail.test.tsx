@@ -9,10 +9,15 @@ const mocks = vi.hoisted(() => ({ addComment: vi.fn() }));
 vi.mock("@/app/actions/issues", () => ({ addCommentAction: mocks.addComment }));
 vi.mock("@/app/actions/issue-bids", () => ({ awardIssueBidAction: vi.fn() }));
 vi.mock("@/app/actions/confirmations", () => ({ giveConfirmationAction: vi.fn() }));
+const decisionActions = vi.hoisted(() => ({ respond: vi.fn(async () => ({ ok: true as const })), agree: vi.fn(async () => ({ ok: true as const })) }));
+vi.mock("@/app/actions/your-decision", () => ({ respondToCloseAction: decisionActions.respond, agreeWithCloseAction: decisionActions.agree }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }), usePathname: () => "/demo/1", useSearchParams: () => new URLSearchParams() }));
 
 import { MergeReviewsPanel, TestVerdictsPanel, type MergeReviewView, type TestVerdictView } from "@/components/issue-review-entries";
 import { IssueBidsPanel, type BidEntryView } from "@/components/issue-bids";
 import { IssueConfirmationsPanel, type ConfirmationEntryView, type ConfirmationsData } from "@/components/issue-confirmations";
+import { DecisionCard } from "@/components/decision-card";
+import { decisionFor, type DecisionIssue, type DecisionSuggestion } from "@/lib/your-decision";
 
 const PR = "https://github.com/emerjent/ziki/pull/42";
 
@@ -222,5 +227,65 @@ describe("IssueConfirmationsPanel past Requires confirmation", () => {
     const banner = screen.getByTestId("confirmation-banner");
     expect(banner).toHaveAttribute("data-confirmed", "true");
     expect(banner).toHaveTextContent(/Ada.*Bob/);
+  });
+});
+
+describe("A decision about your work (#your-decisions)", () => {
+  const closed: DecisionIssue = {
+    status: "closed",
+    isDeleted: false,
+    reporterId: "alice",
+    beneficiaryUserId: "alice",
+    closeReason: "duplicate",
+    closeEvidence: "Same steps and screen as #9, filed first.",
+    duplicateOf: { number: 9, title: "Resources tabs are empty" },
+  };
+  const vote = (onBehalfOfUserId: string, by: string, votes = 1, reason = "duplicate"): DecisionSuggestion => ({
+    reason, votes, summary: `${by}: #9 owns this work.`, evidence: null, onBehalfOfUserId, by, agentName: `${by}'s Claude`,
+  });
+  const suggestions = [vote("cara", "Cara", 2), vote("alice", "Alice"), vote("bob", "Bob"), vote("dan", "Dan", 1, "not_planned")];
+  const decide = (issue: DecisionIssue, viewerId: string, list = suggestions) =>
+    decisionFor({ issue, viewerId, suggestions: list, threshold: 3, decidedAt: new Date("2026-11-05T10:00:00Z") });
+
+  it("tells the owner who closed their issue and with what: other people's votes for the reason it closed with", () => {
+    const decision = decide(closed, "alice")!;
+    expect(decision.voters.map((voter) => voter.by)).toEqual(["Cara", "Bob"]);
+    expect(decision.votes).toBe(3);
+    expect(decision.evidence).toBe(closed.closeEvidence);
+    // The person it is for sees it too, not only the reporter.
+    expect(decide({ ...closed, reporterId: "agent-owner" }, "alice")).not.toBeNull();
+  });
+
+  it("shows nothing to anyone else, for a withdrawal or a deleted issue, before it closes, or when only the owner voted", () => {
+    expect(decide(closed, "bob")).toBeNull();
+    expect(decide({ ...closed, closeReason: "withdrawn" }, "alice")).toBeNull();
+    expect(decide({ ...closed, isDeleted: true }, "alice")).toBeNull();
+    expect(decide({ ...closed, status: "open", closeReason: null }, "alice")).toBeNull();
+    expect(decide(closed, "alice", [vote("alice", "Alice", 3)])).toBeNull();
+  });
+
+  it("sends the owner's reply with their evidence, or their agreement", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<DecisionCard issueId="bug1" decision={decide(closed, "alice")!} />);
+    await user.click(screen.getByRole("button", { name: "I agree" }));
+    expect(decisionActions.agree).toHaveBeenCalledWith("bug1");
+    await user.click(screen.getByRole("button", { name: "Respond" }));
+    await user.type(screen.getByLabelText(/Your side/), "Mine is about the mobile page; #9 is desktop only.");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(decisionActions.respond).toHaveBeenCalledWith("bug1", "Mine is about the mobile page; #9 is desktop only."));
+  });
+
+  it("says a manager can reopen only a not-reproducible close", async () => {
+    const user = userEvent.setup({ delay: null });
+    const notReproducible = decide({ ...closed, closeReason: "not_reproducible", duplicateOf: null }, "alice", [vote("cara", "Cara", 3, "not_reproducible")])!;
+    render(<DecisionCard issueId="bug1" decision={notReproducible} />);
+    await user.click(screen.getByRole("button", { name: "Respond" }));
+    expect(screen.getByText(/A manager can reopen it with your fresh reproduction/)).toBeInTheDocument();
+  });
+
+  it("folds to one line once the owner agreed", () => {
+    render(<DecisionCard issueId="bug1" decision={decide({ ...closed, closeAgreedAt: new Date("2026-11-05T11:00:00Z") }, "alice")!} />);
+    expect(screen.getByTestId("decision-agreed")).toHaveTextContent(/You agreed with this decision/);
+    expect(screen.queryByRole("button", { name: "Respond" })).toBeNull();
   });
 });

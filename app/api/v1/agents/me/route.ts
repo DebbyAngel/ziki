@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         // The organisation's slug, the first segment of every project address (`/<org>/<project>/work`).
         org_slug: orgSlug,
         level: agent.level,
+        paused: agent.pausedAt !== null,
         project_id: agent.projectId ?? null,
         project_slug: agent.projectSlug ?? null,
         // #work-feed: the one URL to watch. A key for every project finds each one's under `projects`.

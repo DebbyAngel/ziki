@@ -40,6 +40,7 @@ import { type AgentDecision } from "@/components/issue-agent-activity";
 import { IssueProgressReport } from "@/components/issue-progress-report";
 import { IssueStageProvider } from "@/components/issue-stage-context";
 import { IssueComments } from "@/components/comment-thread";
+import { AgentSteerPanel } from "@/components/agent-steer-panel";
 import { CommentComposer } from "@/components/comment-composer";
 import { AwardBox } from "@/components/award-box";
 import { AwardStep, IdeaStep, IssueTimeline, TimelineStep, type AwardStepView } from "@/components/issue-timeline";
@@ -99,6 +100,8 @@ import { PROD_CONFIRMATIONS_NEEDED } from "@/lib/live-confirm";
 import { LiveFlow } from "@/components/live-flow";
 import { latestPullRequestReport } from "@/lib/agent-api/pull-request-report";
 import { parseGitHubRepoUrl } from "@/lib/github/pull-request-url";
+import { DecisionCard } from "@/components/decision-card";
+import { decisionFor } from "@/lib/your-decision";
 import { agentInstructionsFor } from "@/lib/agent-instructions";
 import { countedJudgements } from "@/lib/agent-api/tested-status";
 import { DeliveredBanner, type DeliveredBannerProps } from "@/components/delivered-banner";
@@ -120,6 +123,9 @@ import { tenantMemberWhere } from "@/lib/tenant-mentions";
 import { readAgentResolution } from "@/lib/agent-resolution";
 import { AgentResolvedNotice } from "@/components/agent-resolved-notice";
 import { SubmissionEvidence } from "@/components/submission-evidence";
+import { GitHubStatusPanel, type GitHubStatusPanelProps } from "@/components/github-status-panel";
+import { storedGitHubStatus } from "@/lib/github/sync";
+import { githubStatusPowers } from "@/lib/github/status-access";
 import { voteDirection } from "@/lib/voting";
 import {
   issueChipBaseClass,
@@ -428,7 +434,7 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   // has it (its claims), then every bid it took (#issue-bids).
   const pastConfirmation = bug.substatus !== "requires_confirmation";
   // Bids come in from the start, while it awaits confirmation too.
-  const [hold, bidList, claimHistory] = await Promise.all([
+  const [hold, bidList, claimHistory, watchRow] = await Promise.all([
     pastConfirmation ? loadOptional<IssueHold | null>("holder", null, () => currentHold(bug.id)) : Promise.resolve(null as IssueHold | null),
     // While Open, an open bid whose bidder is at the project's capacity says so (#bidder-capacity).
     loadOptional<BidEntryView[]>("bids", [], async () => {
@@ -459,7 +465,12 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         releasedAt: claim.releasedAt,
       }));
     }),
+    loadOptional("issue watch", null, () => prisma.issueWatch.findUnique({
+      where: { userId_bugId: { userId: user.id, bugId: bug.id } },
+      select: { watching: true },
+    })),
   ]);
+  const isWatchingIssue = watchRow?.watching ?? (bug.reporterId === user.id || bug.assigneeId === user.id);
   const awardClaim: AwardStepView | null = claimHistory[0] ?? null;
 
   const [users, voterSummary, activities, activityCount, comments, latestStatusChange, attachments, lastRevision, agentDecisions, escalations] =
@@ -836,7 +847,16 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         .filter((review) => review.verdict === "reject" && new Date(review.updatedAt).getTime() >= deliveredAt)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
       const notGood = testVerdictList.filter((verdict) => !verdict.goodToMerge && new Date(verdict.updatedAt).getTime() >= deliveredAt);
-      sentBack = rejected
+      // #github-status: someone sent it back from the GitHub panel.
+      const githubSendBack = activities.find((a) => {
+        const meta = a.metadata as Record<string, unknown> | null;
+        return meta?.via === "github_send_back" && new Date(a.createdAt).getTime() >= deliveredAt;
+      });
+      const githubNote = (githubSendBack?.metadata as { note?: unknown } | null)?.note;
+      const githubReason = typeof githubNote === "string" ? githubNote.split("\n").find((line) => line.trim())?.trim() ?? null : null;
+      sentBack = githubSendBack && (!rejected || new Date(githubSendBack.createdAt) >= new Date(rejected.updatedAt))
+        ? { reason: `Sent back from the GitHub status: ${githubReason ?? "GitHub can't merge it yet."}`, at: githubSendBack.createdAt }
+        : rejected
         ? { reason: `${rejected.agentName} for ${rejected.by} rejected it for merging: ${rejected.summary}`, at: rejected.updatedAt }
         : notGood.length > 0
           ? { reason: `${notGood.length} ${notGood.length === 1 ? "judgement says" : "judgements say"} it is not good to merge.`, at: notGood[0].updatedAt }
@@ -851,8 +871,62 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
       sentBack,
     };
   }
+  // #github-status: the pull request as GitHub sees it, from In progress until it is Live.
+  let githubPanel: GitHubStatusPanelProps | null = null;
+  if (bug.pullRequestUrl && !bug.isDeleted && ["in_progress", "done", "merge"].includes(bug.status)) {
+    const pullRequestUrl = bug.pullRequestUrl;
+    const [githubStatus, myAgents, latestReport] = await Promise.all([
+      loadOptional("GitHub status", null, () => storedGitHubStatus({ id: bug.id, pullRequestUrl })),
+      loadOptional("agent levels", [] as { level: "working" | "manager" | "merger" }[], () =>
+        prisma.agent.findMany({ where: { tenantId: bug.tenantId, ownerUserId: user.id, revokedAt: null }, select: { level: true } }),
+      ),
+      loadOptional("latest pull request report", null, () =>
+        prisma.pullRequestReport.findFirst({
+          where: { bugId: bug.id, pullRequestUrl },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { source: true, note: true, createdAt: true, agent: { select: { name: true } } },
+        }),
+      ),
+    ]);
+    githubPanel = {
+      bugId: bug.id,
+      pullRequestUrl,
+      issueStatus: bug.status,
+      status: githubStatus
+        ? { snapshot: githubStatus.snapshot, diagnosis: githubStatus.diagnosis, checkedAt: githubStatus.checkedAt.toISOString() }
+        : null,
+      powers: githubStatusPowers({
+        member: Boolean(access.membershipRole),
+        admin: access.admin,
+        ownsIssue: bug.reporterId === user.id || bug.beneficiaryUserId === user.id,
+        agentLevels: myAgents.map((agent) => agent.level),
+      }),
+      newerAgentReport:
+        latestReport?.source === "agent" && latestReport.agent && (!githubStatus || latestReport.createdAt > githubStatus.checkedAt)
+          ? { agentName: latestReport.agent.name, note: latestReport.note, at: latestReport.createdAt.toISOString() }
+          : null,
+    };
+  }
+
   // Comments on the issue itself, at every stage (lib/comment-placement.ts).
   const takesComments = !bug.isDeleted;
+  // Looked up here, not on `hold`: holder is also what agents read through the API.
+  const workingAgent = hold?.status === "active"
+    ? await loadOptional("working agent", null, () => prisma.agent.findFirst({
+        where: { tenantId: bug.tenantId, claims: { some: { bugId: bug.id, status: "active", releasedAt: null } } },
+        select: { id: true, ownerUserId: true, revokedAt: true, pausedAt: true },
+      }))
+    : null;
+  // Owner-only: steering, and what the agent answered.
+  const steeringAgent = workingAgent && workingAgent.ownerUserId === user.id && !workingAgent.revokedAt ? workingAgent : null;
+  const steerNotes = steeringAgent
+    ? await loadOptional("steer notes", [], () => prisma.agentInboxItem.findMany({
+        where: { agentId: steeringAgent.id, bugId: bug.id, eventType: "agent.steer" },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: { id: true, payload: true },
+      }))
+    : [];
   const commentCount = comments.shownThreads + comments.hiddenThreads;
   // #489: the Admin label follows each person's role in this issue's
   // organization, not their account-wide role, the same rule as admin powers.
@@ -926,6 +1000,16 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
   const stale = bug.isDeleted ? null : (await loadOptional("stale hold", null, () => staleHold(bug.id)))?.kind ?? null;
   const abandonCheck = bug.isDeleted || bug.status !== "in_progress" ? null : await loadOptional("sense check", null, () => senseCheck(bug.id));
   const closeSuggestions = await loadOptional<CloseSuggestionsData | null>("close suggestions", null, () => closeSuggestionsFor(bug.id));
+  // A decision other members made about the viewer's own issue (#your-decisions).
+  const yourDecision = closeSuggestions
+    ? decisionFor({
+        issue: bug,
+        viewerId: user.id,
+        suggestions: closeSuggestions.entries,
+        threshold: closeSuggestions.threshold,
+        decidedAt: bug.closedAt,
+      })
+    : null;
   // The judgements as the Delivered rule counts them (independent, weighted, on
   // the delivered pull request), so the bar says what will actually move it.
   const judgementCount = bug.status === "done" && !bug.isDeleted
@@ -1301,11 +1385,14 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           />
 
           <NextStepBar step={liveFix ? liveNextStep(liveFix.check, liveFix.repo) : nextStep} agentInstructions={agentInstructions} />
+          {yourDecision ? <DecisionCard issueId={bug.id} decision={yourDecision} /> : null}
 
           {deliveredBanner ? <DeliveredBanner {...deliveredBanner} /> : null}
 
+          {githubPanel ? <GitHubStatusPanel {...githubPanel} /> : null}
+
               {/* Who has the issue, while it is the latest thing (In progress); the timeline below keeps the award after that. */}
-              {hold?.status === "active" && bug.status === "in_progress" ? <AwardBox hold={hold} /> : null}
+              {hold?.status === "active" && bug.status === "in_progress" ? <AwardBox hold={hold} agentPaused={Boolean(workingAgent?.pausedAt)} bugId={bug.id} isWatching={isWatchingIssue} isIssueOwner={bug.reporterId === user.id} /> : null}
 
               {conversationHasContent ? (
                 <section
@@ -1375,6 +1462,17 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
                   aria-label="Comments"
                   className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
                 >
+                  {steeringAgent ? (
+                    <AgentSteerPanel
+                      agentId={steeringAgent.id}
+                      issueId={bug.id}
+                      paused={steeringAgent.pausedAt !== null}
+                      notes={steerNotes.map((note) => {
+                        const payload = (note.payload ?? {}) as { body?: unknown; plan?: unknown };
+                        return { id: note.id, body: String(payload.body ?? ""), plan: typeof payload.plan === "string" ? payload.plan : null };
+                      })}
+                    />
+                  ) : null}
                   <IssueComments
                     count={commentCount}
                     composer={takesComments ? <CommentComposer bugId={bug.id} /> : null}

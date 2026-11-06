@@ -25,7 +25,7 @@ import { MY_WORK_PARAM, myWorkWhere, parseMyWorkFilter, yourWorkWhere } from "@/
 import { WORK_TAG_TONE, whatsNext } from "@/lib/whats-next";
 import { IDEA_SORT_COOKIE, ISSUE_SORT_COOKIE, getIdeaOrderBy, parseIdeaSort } from "@/lib/list-sort";
 import { SortHeader } from "@/components/sort-header";
-import { PROJECT_LINKS_SLOT_ID, ProjectLinks } from "@/components/project-links";
+import { PROJECT_LINKS_SLOT_ID, ProjectIconLinks, ProjectLinks } from "@/components/project-links";
 import { AgentSetupNotice, type UnconfiguredAgent } from "@/components/agent-setup-notice";
 import { WorkspaceNextStepCard } from "@/components/workspace-next-step-card";
 import { NEXT_STEP_COOKIE, workspaceNextStep, type WorkspaceNextStep } from "@/lib/workspace-next-step";
@@ -86,8 +86,7 @@ import { ideasPath, issuesPath, orgPath, projectPath, type ProjectRef } from "@/
 import { RichText } from "@/components/rich-text";
 import { isOrganizationAdmin } from "@/lib/organization-role";
 import { cookies } from "next/headers";
-import { GettingStarted } from "@/components/getting-started";
-import { GETTING_STARTED_COOKIE, gettingStartedFor, parseDismissed, type GettingStartedStep } from "@/lib/onboarding";
+import { parseDismissed } from "@/lib/onboarding";
 import { liveCheck, liveConfirmLabel, liveFactLabel, type LiveCheck, type LiveFact } from "@/lib/live-check";
 import { latestPullRequestReports } from "@/lib/agent-api/pull-request-report";
 import { parseGitHubRepoUrl } from "@/lib/github/pull-request-url";
@@ -257,25 +256,6 @@ export async function IssuesList({
   // #425: only this project's issues, in its workspace.
   const projectId: string | null = project.id;
   const activeProject = project;
-
-  // #641: a short checklist for a new workspace's owner or admin, until it's
-  // done or dismissed on this device.
-  let gettingStarted: { tenantId: string; workspaceName: string; steps: GettingStartedStep[] } | null = null;
-  if (tenantId && userId && membershipRole && isOrganizationAdmin(membershipRole, effectiveRole)) {
-    try {
-      const dismissed = parseDismissed((await cookies()).get(GETTING_STARTED_COOKIE)?.value);
-      // Earn (#earn-drafts): someone who came to earn never sees the new-workspace checklist.
-      if (!dismissed.includes(tenantId) && slug !== EARN_PROJECT_SLUG) {
-        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
-        if (tenant) {
-          const checklist = await gettingStartedFor(prisma, tenantId, ref);
-          if (!checklist.complete) gettingStarted = { tenantId, workspaceName: tenant.name, steps: checklist.steps };
-        }
-      }
-    } catch (error) {
-      console.error("[bugs] getting-started checklist failed", error);
-    }
-  }
 
   const canDelete = canDeleteTicket(effectiveRole, membershipRole);
   const params: Awaited<SearchParams> = { ...(await searchParams), status, ...(ideas ? { [IDEAS_PARAM]: ideas } : {}) };
@@ -692,7 +672,7 @@ export async function IssuesList({
         )
       : [];
   // The next-step card (#agents-dock) where the empty agents bar used to be: the one next thing for you, from your role and what the
-  // workspace has. Never beside AgentSetupNotice, never repeating a Getting started step that is showing, and dismissable per workspace.
+  // workspace has. Never beside AgentSetupNotice, and dismissable per workspace.
   let nextStep: WorkspaceNextStep | null = null;
   if (tenantId && userId && membershipRole && slug !== EARN_PROJECT_SLUG && !isDeletedView) {
     const dismissed = parseDismissed((await cookies()).get(NEXT_STEP_COOKIE)?.value).includes(tenantId);
@@ -719,7 +699,6 @@ export async function IssuesList({
           blockedAgentCount: unconfiguredAgents.length,
           dismissed,
           // The checklist is drawn on every view but Your Work (and hidden on phones).
-          openChecklistSteps: gettingStarted && !isYourWorkView ? gettingStarted.steps.filter((step) => !step.done).map((step) => step.id) : [],
         });
       }
     }
@@ -1002,12 +981,6 @@ export async function IssuesList({
 
   const headerContent = (
     <>
-      {/* Your Work is about your own assignments, not setting up the workspace; and on a phone it would cover the list. */}
-      {gettingStarted && !isYourWorkView ? (
-        <div className="max-sm:hidden">
-          <GettingStarted {...gettingStarted} />
-        </div>
-      ) : null}
       {activeProject?.goal ? (
         <section aria-labelledby="project-goal-heading" className="rounded-[20px] border border-zk-border bg-zk-surface px-5 py-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -1113,7 +1086,7 @@ export async function IssuesList({
               />
             }
             // Open ideas, none yet and no search: what Ziki is for and where to type (#ideas-welcome).
-            welcome={ideasView === "new" && !qParam ? <IdeasWelcome projectId={project.id} projectName={project.name} /> : undefined}
+            welcome={ideasView === "new" && !qParam ? <IdeasWelcome projectId={project.id} /> : undefined}
             empty={
               ideasView === "drafts"
                 ? "No unstructured draft ideas are waiting to be structured."
@@ -1429,18 +1402,20 @@ export async function IssuesList({
         />
       ) : null}
       <div className="absolute right-0 top-0 flex items-center gap-2 max-sm:static max-sm:self-end">
-        {/* The project's settings icon, at the far right: the site and code URLs, notes, and the settings page. */}
+        {/* At the far right: the site and code addresses, then Project notes and the settings page. */}
         {projectLinks && !isDeletedView ? (
           <ProjectLinks
             slug={slug}
             siteUrl={projectLinks.siteUrl}
             repoUrl={projectLinks.repoUrl}
             canEdit={canEditProjectLinks}
-            notesHref={projectPath(ref, "/notes")}
-            settingsHref={`/projects/${encodeURIComponent(slug)}/settings`}
             // #agent-work-gate: a blocked agent comes first; the site URL ask waits (the icon still opens it).
             askOnLoad={isIdeasView && unconfiguredAgents.length === 0}
           />
+        ) : null}
+        {/* Project notes and settings, as icons, beside the tabs. */}
+        {!isDeletedView ? (
+          <ProjectIconLinks notesHref={projectPath(ref, "/notes")} settingsHref={`/projects/${encodeURIComponent(slug)}/settings`} />
         ) : null}
       </div>
     </div>

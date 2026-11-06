@@ -272,35 +272,34 @@ describe("agents dock settings", () => {
     return import("@/components/agents-dock-prefs");
   }
 
-  it("starts with the face and the bar closing when the cursor leaves", async () => {
+  it("starts with the face look", async () => {
     fakeStorage(null);
     const { readPrefs, lookFor } = await load();
-    expect(readPrefs().closeOnLeave).toBe(true);
     expect(lookFor(readPrefs(), "agent-1")).toBe("face");
     vi.unstubAllGlobals();
   });
 
-  it("keeps the checkbox's choice across a page load, and ignores anything it can't read", async () => {
+  it("keeps a hidden agent across a page load, and ignores anything it can't read", async () => {
     const store = fakeStorage(null);
-    (await load()).writePrefs({ closeOnLeave: false });
-    expect(JSON.parse(store.get("ziki-agents-dock")!).closeOnLeave).toBe(false);
-    expect((await load()).readPrefs().closeOnLeave).toBe(false);
-    fakeStorage(JSON.stringify({ closeOnLeave: "no", pinned: 1, looks: { a: "nonsense", b: "pixel" } }));
+    (await load()).writeHidden("agent-1", true);
+    expect(JSON.parse(store.get("ziki-agents-dock")!).hidden).toEqual(["agent-1"]);
+    expect((await load()).readPrefs().hidden).toEqual(["agent-1"]);
+    fakeStorage(JSON.stringify({ hidden: "no", looks: { a: "nonsense", b: "pixel" } }));
     const junk = (await load()).readPrefs();
-    expect(junk).toMatchObject({ closeOnLeave: true, pinned: true, looks: { b: "pixel" } });
+    expect(junk).toMatchObject({ hidden: [], looks: { b: "pixel" } });
     expect(junk.looks.a).toBeUndefined();
     fakeStorage("not json");
-    expect((await load()).readPrefs().closeOnLeave).toBe(true);
+    expect((await load()).readPrefs().hidden).toEqual([]);
     vi.unstubAllGlobals();
   });
 
   it("still works when the browser blocks storage: the choice holds until the page reloads", async () => {
     fakeStorage(null, true);
-    const { readPrefs, writePrefs } = await load();
-    expect(readPrefs().closeOnLeave).toBe(true);
-    writePrefs({ closeOnLeave: false });
-    expect(readPrefs().closeOnLeave).toBe(false);
-    expect((await load()).readPrefs().closeOnLeave).toBe(true);
+    const { readPrefs, writeHidden } = await load();
+    expect(readPrefs().hidden).toEqual([]);
+    writeHidden("agent-1", true);
+    expect(readPrefs().hidden).toEqual(["agent-1"]);
+    expect((await load()).readPrefs().hidden).toEqual([]);
     vi.unstubAllGlobals();
   });
 });

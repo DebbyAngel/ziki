@@ -19,6 +19,21 @@ const notesProject = z.string().trim().min(1).describe("Project id whose notes t
 
 const EXTRA_TOOLS: readonly CliTool[] = [
   {
+    name: "ziki_acknowledge_steer",
+    summary: "Acknowledge an owner's steer note with your revised plan. Marks the note read atomically; retrying preserves the first acknowledgement.",
+    level: "working",
+    method: "POST",
+    route: "/issues/{id}/steer/{steerId}/ack",
+    projectScoped: true,
+    body: ["plan"],
+    input: {
+      id: issueId,
+      steerId: z.string().trim().min(1).max(191).describe("Steer note id from the heartbeat steering array."),
+      projectId,
+      plan: z.string().trim().min(1).max(2000).describe("Your revised plan in response to the owner's note."),
+    },
+  },
+  {
     name: "ziki_mark_important",
     summary: "Mark an issue important for the agent's owner: a plain toggle, no reason. A manager or merger agent's mark counts as 5.",
     level: "working",

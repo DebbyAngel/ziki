@@ -105,7 +105,7 @@ describe("marking items read", () => {
     db.agentInboxItem.updateMany.mockResolvedValue({ count: 2 });
     expect(await markInboxRead({ agentId: "agent-bob" }, { ids: ["a", "b"] })).toBe(2);
     expect(db.agentInboxItem.updateMany).toHaveBeenCalledWith({
-      where: { agentId: "agent-bob", id: { in: ["a", "b"] }, readAt: null }, data: { readAt: expect.any(Date) },
+      where: { agentId: "agent-bob", id: { in: ["a", "b"] }, readAt: null, NOT: { eventType: "agent.steer" } }, data: { readAt: expect.any(Date) },
     });
   });
 
@@ -113,7 +113,7 @@ describe("marking items read", () => {
     db.agentInboxItem.findFirst.mockResolvedValueOnce({ id: "item-1", createdAt: item.createdAt }).mockResolvedValueOnce(null);
     db.agentInboxItem.updateMany.mockResolvedValue({ count: 3 });
     expect(await markInboxRead({ agentId: "agent-bob" }, { upTo: "item-1" })).toBe(3);
-    expect(db.agentInboxItem.updateMany.mock.calls[0][0].where).toEqual({ agentId: "agent-bob", readAt: null,
+    expect(db.agentInboxItem.updateMany.mock.calls[0][0].where).toEqual({ agentId: "agent-bob", readAt: null, NOT: { eventType: "agent.steer" },
       OR: [{ createdAt: { lt: item.createdAt } }, { createdAt: item.createdAt, id: { lte: "item-1" } }] });
     expect(await markInboxRead({ agentId: "agent-bob" }, { upTo: "other-agents-item" })).toBeNull();
   });

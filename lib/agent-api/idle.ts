@@ -39,7 +39,7 @@ export type HeldClaim = {
   beneficiaryUserId: string;
   claimedAt: Date | null;
   extendedAt: Date | null;
-  agent: { ownerUserId: string };
+  agent: { ownerUserId: string; pausedAt: Date | null };
 };
 
 export type InProgressWork = {
@@ -84,7 +84,7 @@ export async function inProgressWork(db: Db, bugId: string): Promise<InProgressW
   const claim = await db.issueClaim.findFirst({
     where: { bugId, status: "active", releasedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, agentId: true, beneficiaryUserId: true, claimedAt: true, extendedAt: true, agent: { select: { ownerUserId: true } } },
+    select: { id: true, agentId: true, beneficiaryUserId: true, claimedAt: true, extendedAt: true, agent: { select: { ownerUserId: true, pausedAt: true } } },
   });
   return { bug, claim, lastUpdate: await inProgressLastUpdate(db, bug, claim) };
 }
@@ -115,7 +115,8 @@ export async function findIdleInProgress(
   const idle: (IdleInProgress & { number: number; title: string; pullRequestUrl: string | null })[] = [];
   for (const candidate of candidates) {
     const found = await idleInProgress(candidate.id, db, now);
-    if (found) idle.push({ ...found, number: candidate.number, title: candidate.title, pullRequestUrl: candidate.pullRequestUrl });
+    // A paused agent can't post updates; its owner resumes it, nobody checks on it meanwhile.
+    if (found && !found.claim?.agent.pausedAt) idle.push({ ...found, number: candidate.number, title: candidate.title, pullRequestUrl: candidate.pullRequestUrl });
   }
   return idle.sort((a, b) => a.lastUpdate.getTime() - b.lastUpdate.getTime());
 }
