@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { ideaPath, issuesPath, projectRef, refOf } from "@/lib/project-paths";
+import { MarketingAreaMarker } from "@/components/marketing/marketing-area";
+import { MarketingTaskDetail } from "@/components/marketing/marketing-task-detail";
+import { entryReplySelect, toEntryReplies } from "@/lib/agent-api/entry-fields";
 import Image from "next/image";
 import { Suspense } from "react";
 import type { Metadata } from "next";
@@ -341,11 +344,12 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
         type: { select: { id: true, name: true, isActive: true } },
         reporter: { select: { name: true, email: true, role: true, image: true } },
         createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
-        idea: { select: { id: true, number: true, convertedAt: true, _count: { select: { verdicts: true } } } },
+        linkedIssue: { select: { number: true, title: true, isDeleted: true } },
+        idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
         milestone: { select: { id: true, title: true, dueDate: true, isClosed: true } },
         assignee: { select: { id: true, name: true, role: true, image: true } },
         area: { select: { id: true, name: true } },
-        project: { select: { slug: true, tenant: { select: { slug: true } } } },
+        project: { select: { slug: true, name: true, goal: true, siteUrl: true, tenant: { select: { slug: true } } } },
         votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
         // #285: both sides of a duplicate link.
         duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, tenant: { select: { slug: true } } } } } },
@@ -376,10 +380,11 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
           type: { select: { id: true, name: true, isActive: true } },
           reporter: { select: { name: true, email: true, role: true, image: true } },
           createdByAgent: { select: { id: true, name: true, ownerUserId: true } },
-          idea: { select: { id: true, number: true, convertedAt: true, _count: { select: { verdicts: true } } } },
+          linkedIssue: { select: { number: true, title: true, isDeleted: true } },
+          idea: { select: { id: true, number: true, rationale: true, convertedAt: true, _count: { select: { verdicts: true } } } },
           assignee: { select: { id: true, name: true, role: true, image: true } },
           area: { select: { id: true, name: true } },
-          project: { select: { slug: true, tenant: { select: { slug: true } } } },
+          project: { select: { slug: true, name: true, goal: true, siteUrl: true, tenant: { select: { slug: true } } } },
           votes: { where: { userId }, select: { id: true, value: true }, take: 1 },
           duplicateOf: { select: { id: true, number: true, title: true, status: true, isDeleted: true, project: { select: { slug: true, tenant: { select: { slug: true } } } } } },
           duplicates: {
@@ -1145,6 +1150,517 @@ export default async function BugDetailPage({ params, searchParams }: BugPagePro
     ...activities,
     ...stepActivities.filter((entry) => !oldestLoadedActivity || entry.createdAt.getTime() >= new Date(oldestLoadedActivity).getTime()),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id.localeCompare(a.id));
+
+  if (bug.track === "marketing") {
+    const marketingDeliveries = (
+      await prisma.delivery.findMany({
+        where: { bugId: bug.id },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          agentId: true,
+          beneficiaryUserId: true,
+          summary: true,
+          description: true,
+          deliverableText: true,
+          deliverableUrls: true,
+          screenshots: true,
+          testResults: true,
+          updatedAt: true,
+          agent: { select: { name: true } },
+          beneficiary: { select: { name: true } },
+          replies: entryReplySelect,
+        },
+      })
+    ).map(({ agent, beneficiary, replies, ...row }) => ({
+      ...row,
+      agentName: agent.name,
+      by: beneficiary.name ?? "A member",
+      current: true,
+      replies: toEntryReplies(replies),
+    }));
+
+    const marketingReviews = testVerdictList.map((verdict) => ({
+      id: verdict.id,
+      goodToMerge: verdict.goodToMerge,
+      summary: verdict.summary,
+      description: verdict.description,
+      agentName: verdict.agentName,
+      by: verdict.by,
+      updatedAt: verdict.updatedAt,
+      replies: verdict.replies ?? [],
+    }));
+
+    if (marketingDeliveries.length > 0) {
+      const latestMarketingDelivery = marketingDeliveries[0];
+      const deliveredAt = new Date(latestMarketingDelivery.updatedAt).getTime();
+      const stillDelivered = ["done", "merge", "resolved"].includes(bug.status);
+      let sentBack: DeliveredBannerProps["sentBack"] = null;
+      if (!stillDelivered && bug.status !== "closed") {
+        const notGood = testVerdictList.filter(
+          (verdict) => !verdict.goodToMerge && new Date(verdict.updatedAt).getTime() >= deliveredAt,
+        );
+        sentBack = notGood.length > 0
+          ? {
+              reason: `${notGood.length} ${notGood.length === 1 ? "review says" : "reviews say"} revisions are needed.`,
+              at: notGood[0].updatedAt,
+            }
+          : { reason: "The claim on it ended, so the task is open for bids again.", at: null };
+      }
+      deliveredBanner = {
+        agentName: latestMarketingDelivery.agentName,
+        by: latestMarketingDelivery.by,
+        summary: latestMarketingDelivery.summary,
+        deliverableUrls: latestMarketingDelivery.deliverableUrls,
+        hasDeliverableText: Boolean(latestMarketingDelivery.deliverableText),
+        pullRequestUrl: null,
+        deliveredAt: latestMarketingDelivery.updatedAt,
+        sentBack,
+      };
+    }
+
+    const marketingNextStep = {
+      ...nextStep,
+      detail: nextStep.detail ? nextStep.detail.replace(/\bissue\b/gi, "task") : null,
+      action: nextStep.action
+        ? nextStep.action.replace(/\bfixing it\b/gi, "executing it").replace(/\bissue\b/gi, "task")
+        : null,
+    };
+
+    // The brief's focus, when it has one (M-API-8); otherwise the project's own.
+    const marketingBrief = await prisma.projectBrief.findUnique({
+      where: { projectId: bug.projectId },
+      select: { currentFocus: true },
+    });
+    const marketingFocus = marketingBrief?.currentFocus ?? bug.project.goal;
+    const marketingSite = bug.project.siteUrl;
+
+    return (
+      <>
+      <MarketingAreaMarker />
+      <MarketingTaskDetail
+        bug={{
+          id: bug.id,
+          number: bug.number,
+          title: bug.title,
+          description: bug.description,
+          status: bug.status,
+          substatus: bug.substatus,
+          reward: bug.reward ? Number(bug.reward) : null,
+          revisionCount: bug.revisionCount,
+          createdAt: bug.createdAt,
+          type: bug.type,
+          reporter: bug.reporter,
+          createdByAgent: bug.createdByAgent,
+          project: {
+            slug: refOf(bug.project),
+            name: bug.project.name,
+            goal: marketingFocus,
+            siteUrl: marketingSite,
+          },
+          idea: bug.idea
+            ? {
+                id: bug.idea.id,
+                number: bug.idea.number,
+                rationale: bug.idea.rationale,
+              }
+            : null,
+        }}
+        revisionLimit={workflow.revisionLimit}
+        hold={hold}
+        agentPaused={Boolean(workingAgent?.pausedAt)}
+        isWatching={isWatchingIssue}
+        isIssueOwner={bug.reporterId === user.id}
+        deliveries={marketingDeliveries}
+        reviews={marketingReviews}
+        bannerSlot={deliveredBanner ? <DeliveredBanner {...deliveredBanner} /> : null}
+        nextStepSlot={<NextStepBar step={marketingNextStep} agentInstructions={agentInstructions} />}
+        mergeReviewsSlot={
+          timelineReviews.length > 0 || mergeReviewing ? (
+            <MergeReviewsPanel
+              at={firstAt(timelineReviews)}
+              bugId={bug.id}
+              reviews={timelineReviews}
+              canReply={mergeReviewing}
+              history={!mergeReviewing}
+            />
+          ) : null
+        }
+        disputeSlot={
+          disputeRoles.length > 0 ? (
+            <DisputeAwardDialog bugNumber={bug.number} roles={disputeRoles} />
+          ) : null
+        }
+        escalationsSlot={<IssueEscalations escalations={escalations} />}
+        descriptionSlot={
+          <div className="flex flex-col gap-5">
+            {marketingFocus ? (
+              <div className="flex items-start gap-3 rounded-xl border border-zk-info-fg/30 bg-zk-info-bg/40 p-3.5 text-sm text-zk-text">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zk-info-fg text-white">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m12 8 4 4-4 4M8 12h8" />
+                  </svg>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold uppercase tracking-wider text-[11px] text-zk-info-fg">
+                      {bug.project.name ? `${bug.project.name} Focus` : "Campaign Focus"}
+                    </span>
+                    {marketingSite ? (
+                      <a
+                        href={marketingSite}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-zk-accent hover:underline"
+                      >
+                        Visit Site <span aria-hidden="true">↗</span>
+                      </a>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 font-medium leading-relaxed">{marketingFocus}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {bug.idea?.rationale ? (
+              <div className="rounded-xl border border-zk-border bg-zk-surface p-4 text-xs">
+                <span className="font-bold uppercase tracking-wider text-[11px] text-zk-muted">
+                  Strategic Rationale
+                </span>
+                <p className="mt-1.5 text-sm leading-relaxed text-zk-text">
+                  {bug.idea.rationale}
+                </p>
+              </div>
+            ) : null}
+
+            <EditableIssueDescription
+              bugId={bug.id}
+              initialTitle={bug.title}
+              initialDescription={bug.description}
+              summary={bug.summary}
+              canEdit={canEdit}
+              users={users}
+              lastEditedAt={lastRevision?.editedAt ?? null}
+              historyHref={issueHref(bug, "/history")}
+              tags={
+                bug.area ? (
+                  <span title="Area" className="inline-flex items-center rounded-full bg-zk-chip px-2.5 py-0.5 text-xs font-semibold text-zk-text2 ring-1 ring-zk-border">
+                    {bug.area.name}
+                  </span>
+                ) : null
+              }
+            >
+              {bug.milestone ? (
+                <dl className="mt-4 grid grid-cols-1 gap-3 text-sm text-zk-text2 sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-zk-muted">Milestone</dt>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <Link href={milestoneIssuesHref(refOf(bug.project), bug.milestone.id)} className="font-bold text-zk-accent hover:underline">
+                        {bug.milestone.title}
+                      </Link>
+                      <MilestoneDue due={dueDateValue(bug.milestone.dueDate) || null} isClosed={bug.milestone.isClosed} />
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+            </EditableIssueDescription>
+          </div>
+        }
+        bidsCount={bidList.length}
+        commentsCount={commentCount}
+        bidsSlot={
+          pastConfirmation || bidList.length > 0 || bidAgents.length > 0 ? (
+            <IssueBidsPanel
+              bidAction={bidAgents.length > 0 ? <BidButton bugId={bug.id} agents={bidAgents} /> : undefined}
+              bids={bidList}
+              at={firstAt(bidList)}
+              collapsed={bug.status !== "open"}
+              canAward={canAwardBids}
+              awardThreshold={workflow.awardThreshold}
+            />
+          ) : null
+        }
+        awardSlot={awardClaim ? <AwardStep award={awardClaim} /> : null}
+        commentsSlot={
+          takesComments || commentCount > 0 ? (
+            <section
+              id="comments"
+              aria-label="Comments"
+              className="scroll-mt-24 rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-[22px]"
+            >
+              <IssueComments
+                count={commentCount}
+                composer={takesComments ? <CommentComposer bugId={bug.id} /> : null}
+                replyBugId={takesComments ? bug.id : undefined}
+                reporterId={bug.reporterId}
+                comments={commentTree}
+                attachmentsByComment={attachmentsByComment}
+                organizationRoles={organizationRoles}
+                users={commentMentionUsers}
+                currentUserId={user.id}
+                currentUserRole={user.role}
+                tenantAdmin={access.admin}
+                readOnly={bug.isDeleted}
+                markedImportantBy={importanceMarkers}
+              >
+                {comments.hiddenThreads > 0 ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-zk-chip px-3 py-2 text-sm text-zk-text2 print:hidden">
+                    <span>
+                      {comments.hiddenThreads} earlier{" "}
+                      {comments.hiddenThreads === 1 ? "thread" : "threads"} not shown.
+                    </span>
+                    <Link
+                      href={earlierThreadsHref(pageQuery, comments.shownThreads)}
+                      scroll={false}
+                      className="font-bold text-zk-accent hover:underline"
+                    >
+                      Show {Math.min(comments.hiddenThreads, COMMENT_THREADS_PER_PAGE)} earlier
+                    </Link>
+                    {comments.hiddenThreads > COMMENT_THREADS_PER_PAGE ? (
+                      <Link
+                        href={earlierThreadsHref(pageQuery, comments.shownThreads, true)}
+                        scroll={false}
+                        className="font-bold text-zk-accent hover:underline"
+                      >
+                        Show all
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+              </IssueComments>
+              <Suspense fallback={null}>
+                <CommentPermalinkResolver />
+              </Suspense>
+            </section>
+          ) : null
+        }
+        voteButtonSlot={
+          <VoteButton
+            bugId={bug.id}
+            voteCount={bug.voteCount}
+            userVote={userVote}
+            likeCount={voterSummary.likes.count}
+            likeVoters={voterSummary.likes.voters}
+            size="md"
+            showAvatars={false}
+            readOnly={bug.isDeleted}
+          />
+        }
+        actionsMenuSlot={
+          canMarkDuplicate || canDeleteHere ? (
+            <IssueActionsMenu>
+              {canMarkDuplicate ? <MarkDuplicateButton bugId={bug.id} /> : null}
+              {canDeleteHere ? (
+                <DeleteIssueButton bugId={bug.id} bugTitle={bug.title} counts={keptCounts} variant="danger" size="sm" />
+              ) : null}
+            </IssueActionsMenu>
+          ) : null
+        }
+        attachmentsSlot={
+          issueAttachments.length > 0 ? (
+            <section className="rounded-[20px] border border-zk-border bg-zk-surface p-5 sm:p-6">
+              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">
+                Attachments
+              </h2>
+              <AttachmentList attachments={issueAttachments} />
+            </section>
+          ) : null
+        }
+        alertsSlot={
+          <>
+            {bug.isDeleted ? (
+              <div className="rounded-[20px] border border-zk-bad-bd bg-zk-bad-bg p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zk-bad-fg">
+                      This task was deleted
+                    </h3>
+                    <p className="text-xs text-zk-bad-fg/90">
+                      {deletedSummary(keptCounts)}
+                    </p>
+                  </div>
+                  <RestoreIssueButton
+                    bugId={bug.id}
+                    bugTitle={bug.title}
+                    counts={keptCounts}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {bug.duplicateOf ? (
+              <section
+                aria-label="Duplicate"
+                className="rounded-[20px] border border-zk-warn-bd bg-zk-warn-bg p-4 sm:p-5"
+              >
+                <h2 className="text-sm font-semibold text-zk-warn-fg">
+                  Marked as duplicate of{" "}
+                  <Link
+                    href={issueHref(bug.duplicateOf)}
+                    className="underline hover:text-zk-text"
+                  >
+                    #{bug.duplicateOf.number} {bug.duplicateOf.title}
+                  </Link>
+                </h2>
+              </section>
+            ) : null}
+
+            {resolution ? (
+              <section
+                aria-label="Resolution note"
+                className="rounded-[20px] border border-zk-border bg-zk-ok-bg p-4 sm:p-5"
+              >
+                <h2 className="text-sm font-semibold text-zk-ok-fg">
+                  {resolutionStatusLabel[resolution.status]} by {resolution.by}
+                  <span className="ml-2 text-xs font-normal">
+                    <LocalTime date={resolution.at} />
+                  </span>
+                </h2>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-zk-text">
+                  {resolution.note}
+                </p>
+              </section>
+            ) : null}
+          </>
+        }
+        sideRailSlot={
+          <>
+            {bug.linkedIssue && !bug.linkedIssue.isDeleted ? (
+              <section aria-label="Related product issue" className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface p-5">
+                <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Related product issue</h2>
+                <Link href={issuePath(refOf(bug.project), bug.linkedIssue.number)} className="text-sm font-semibold text-zk-accent hover:underline">
+                  #{bug.linkedIssue.number} {bug.linkedIssue.title}
+                </Link>
+              </section>
+            ) : null}
+            <section aria-label="Status" className="flex flex-col gap-2.5 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+              <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">Status</h2>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                {bug.isDeleted ? (
+                  <span className={`${issueChipBaseClass} bg-zk-bad-bg text-zk-bad-fg`}>Deleted</span>
+                ) : null}
+                <Badge className={`${issueChipBaseClass} ${issueStatusChipClass[bug.substatus]}`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                  {stateLabel(bug.substatus)}
+                </Badge>
+                {bug.isBoosted && !bug.isDeleted ? (
+                  <span className={`${issueChipBaseClass} border border-zk-warn-bd bg-zk-warn-bg text-zk-warn-fg`}>Boosted</span>
+                ) : null}
+              </div>
+              {statusFlags.length > 0 ? (
+                <ul data-testid="status-flags" className="m-0 flex list-none flex-col gap-1 p-0">
+                  {statusFlags.map((flag) => (
+                    <li key={flag.label} className="flex items-center gap-1.5 text-xs text-zk-text2" title={flag.title}>
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${FLAG_DOT[flag.tone]}`} aria-hidden />
+                      {flag.label}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {bug.status === "closed" && bug.closeEvidence && !bug.isDeleted ? (
+                <p data-testid="close-evidence" className="m-0 break-words text-xs leading-[1.5] text-zk-muted">
+                  {bug.closeEvidence}
+                </p>
+              ) : null}
+              {canWithdraw ? (
+                <form action={withdrawIssueAction} data-testid="issue-withdraw">
+                  <input type="hidden" name="issueId" value={bug.id} />
+                  <ConfirmSubmitButton
+                    confirm={{
+                      title: `Withdraw issue #${bug.number}?`,
+                      body: "It closes as withdrawn at once, and any agent working on it is released. Its comments and entries stay.",
+                      confirmLabel: "Withdraw issue",
+                    }}
+                  >
+                    Withdraw issue
+                  </ConfirmSubmitButton>
+                </form>
+              ) : null}
+            </section>
+
+            {rewardRow ? (
+              <IssueRewardPanel
+                bugId={bug.id}
+                reward={Number(rewardRow.reward)}
+                fixed={Boolean(rewardRow.rewardFixedAt)}
+                estimates={rewardEstimates}
+                viewerId={user.id}
+                canEstimate={!bug.isDeleted && bug.status !== "closed"}
+                caption="paid upon accepted delivery"
+              />
+            ) : null}
+
+            <section className="flex flex-col gap-2 rounded-[20px] border border-zk-border bg-zk-surface px-4 py-3.5">
+              <span className="text-xs font-bold uppercase tracking-[0.08em] text-zk-muted">People</span>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="w-16 shrink-0 text-xs text-zk-muted">Reporter</span>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <UserNameWithBadges
+                    name={bug.reporter.name}
+                    image={bug.reporter.image}
+                    avatar="sm"
+                    className="min-w-0 !flex-nowrap text-xs"
+                    userId={bug.reporterId}
+                  />
+                  {bug.createdByAgent ? <AgentChip name={bug.createdByAgent.name} className="ml-auto" /> : null}
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="w-16 shrink-0 text-xs text-zk-muted">Assignee</span>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  {assignee ? (
+                    <UserNameWithBadges
+                      name={assignee.name}
+                      role={assignee.role}
+                      organizationRole={organizationRoles[assignee.id] ?? null}
+                      image={assignee.image}
+                      avatar="sm"
+                      className="min-w-0 !flex-nowrap text-xs"
+                      userId={assignee.id}
+                    />
+                  ) : (
+                    <span className="text-xs text-zk-muted">Unassigned</span>
+                  )}
+                  {assignee && hold?.agentName ? <AgentChip name={hold.agentName} className="ml-auto" /> : null}
+                  {canSelfAssign && (!assignee || isAssignee) ? (
+                    <SelfAssignButton
+                      bugId={bug.id}
+                      isAssignedToMe={isAssignee}
+                      variant="ghost"
+                      size="xs"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <IssueLinks
+              links={proofLinks}
+              linkedPullRequestUrl={bug.pullRequestUrl}
+              pullRequests={false}
+              idea={sourceIdea ? { number: sourceIdea.number, slug: refOf(bug.project) } : null}
+              repairs={linkRepairs}
+            />
+
+            <SubmissionEvidence
+              screenshots={submissionScreenshots}
+              testResults={submissionTestResults}
+              pullRequestUrl={bug.pullRequestUrl}
+            />
+
+            <ActivityTimeline
+              activities={[...shownActivities].reverse()}
+              totalCount={activityCount + stepActivities.length}
+            />
+          </>
+        }
+        canReply={!bug.isDeleted}
+      />
+      </>
+    );
+  }
 
   return (
     <div className="issue-detail-scope flex flex-col gap-5 pb-10">

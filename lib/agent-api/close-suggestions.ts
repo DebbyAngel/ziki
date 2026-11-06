@@ -1,3 +1,4 @@
+import { reopenSubstatus } from "@/lib/marketing/track";
 import { z } from "zod";
 import type { Prisma, PrismaClient, Status, Substatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -123,6 +124,7 @@ async function issueInProject(tenantId: string, projectId: string, issueRef: str
 }
 
 const lockedSelect = {
+  track: true,
   status: true, substatus: true, isDeleted: true, isBoosted: true, closeReason: true,
   reporterId: true, beneficiaryUserId: true, assigneeId: true,
   createdByAgent: { select: { ownerUserId: true } },
@@ -463,7 +465,7 @@ export async function reopenIssue(agent: AgentContext, projectId: string, issueR
         : "Only a closed issue can be reopened.";
       throw new IssueApiError(409, message, { error: "not_reopenable", message, status: fresh.status, closeReason: fresh.closeReason });
     }
-    const to: Substatus = (await isConfirmed(bug.id, tx)) ? "open" : "requires_confirmation";
+    const to = reopenSubstatus(fresh.track, await isConfirmed(bug.id, tx));
     const previousReason = fresh.closeReason;
     await tx.bug.update({
       where: { id: bug.id },

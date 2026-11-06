@@ -231,6 +231,17 @@ describe("giveConfirmation (#issue-confirmations)", () => {
     expect(state.entries.filter((e) => e.onBehalfOfUserId === "bob")).toHaveLength(2);
   });
 
+  it("refuses a marketing issue, which has no confirmation step, and writes and pays nothing", async () => {
+    state.bug = bugRow({ track: "marketing", substatus: "open" });
+    const refused = await rejection(giveConfirmation(person("bob"), scope, "bug1", body("confirm")));
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ error: "wrong_track" });
+    expect(db.issueConfirmation.upsert).not.toHaveBeenCalled();
+    expect(state.points).toEqual([]);
+    const opener = { agentId: "agent-eli", ownerId: "eli", tenantId: "t1" };
+    expect((await rejection(openConfirmedIssue(opener, scope, "bug1"))).body).toMatchObject({ error: "wrong_track" });
+  });
+
   it("moves a confirmed issue to Open for any agent, and refuses below the threshold (#confirmation-weights)", async () => {
     const opener = { agentId: "agent-eli", ownerId: "eli", tenantId: "t1" };
     await giveConfirmation(person("bob"), scope, "bug1", body("confirm"));
